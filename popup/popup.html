@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NoteMath</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="hdr">
+      <h1 class="title" id="extTitle"></h1>
+      <button type="button" class="linkish" id="btnOptions"></button>
+    </header>
+
+    <button type="button" class="btn primary open-calc" id="btnOpenCalc"></button>
+
+    <section class="row">
+      <label class="lbl" for="selSession" id="lblSession"></label>
+      <div class="sess">
+        <select id="selSession"></select>
+        <button type="button" class="btn" id="btnNew"></button>
+      </div>
+    </section>
+
+    <section class="expr">
+      <label class="lbl" for="inpExpr" id="lblExpr"></label>
+      <input type="text" id="inpExpr" class="inp" autocomplete="off" spellcheck="false" />
+      <div class="exprRow">
+        <button type="button" class="btn primary" id="btnAdd"></button>
+        <button type="button" class="btn" id="btnEval"></button>
+      </div>
+      <div class="calcOut" id="elCalcOut"></div>
+    </section>
+
+    <section class="totalBox">
+      <div class="lbl" id="lblTotal"></div>
+      <div class="big" id="elTotal">—</div>
+    </section>
+
+    <section class="hist" id="hist"></section>
+
+    <section class="actions">
+      <button type="button" class="btn primary" id="btnCopy"></button>
+      <button type="button" class="btn" id="btnUndo"></button>
+      <button type="button" class="btn" id="btnRedo"></button>
+      <button type="button" class="btn" id="btnReset"></button>
+    </section>
+
+    <section class="actions">
+      <button type="button" class="btn" id="btnTxt"></button>
+      <button type="button" class="btn" id="btnJson"></button>
+    </section>
+
+    <label class="chk">
+      <input type="checkbox" id="chkPanel" />
+      <span id="lblPanel"></span>
+    </label>
+
+    <script src="../lib/number-parse.js"></script>
+    <script src="../lib/parser.js"></script>
+    <script src="../lib/storage-model.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

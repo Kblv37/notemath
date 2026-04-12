@@ -1,0 +1,19 @@
+#NoteMath-host {
+  all: initial;
+  position: fixed;
+  z-index: 2147483646;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  pointer-events: none;
+}
+
+#NoteMath-host * {
+  box-sizing: border-box;
+}
+
+#NoteMath-toast-host {
+  all: initial;
+  position: fixed;
+  z-index: 2147483647;
+  pointer-events: none;
+  inset: 0;
+}

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NoteMath — Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <h1 class="h1" id="pageTitle"></h1>
+
+      <section class="card">
+        <h2 class="h2" id="lblTheme"></h2>
+        <div class="row">
+          <label><input type="radio" name="theme" value="light" /> <span id="tLight"></span></label>
+          <label><input type="radio" name="theme" value="dark" /> <span id="tDark"></span></label>
+          <label><input type="radio" name="theme" value="system" /> <span id="tSystem"></span></label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="h2" id="lblHotkeys"></h2>
+        <p class="hint" id="hintShortcuts"></p>
+        <label class="line" for="inpDebounce"
+          ><span id="lblDebounce"></span>
+          <input type="number" id="inpDebounce" class="inp num" min="0" max="500" step="10"
+        /></label>
+      </section>
+
+      <section class="card">
+        <h2 class="h2" id="lblBehavior"></h2>
+        <label class="line"
+          ><input type="checkbox" id="chkFallback" /> <span id="txtFallback"></span
+        ></label>
+        <label class="line"
+          ><input type="checkbox" id="chkInputs" /> <span id="txtInputs"></span
+        ></label>
+        <label class="line"
+          ><input type="checkbox" id="chkPanel" /> <span id="txtPanel"></span
+        ></label>
+        <label class="line"
+          ><input type="checkbox" id="chkToast" /> <span id="txtToast"></span
+        ></label>
+        <label class="line"
+          ><input type="checkbox" id="chkCalc" /> <span id="txtCalc"></span
+        ></label>
+        <label class="line"
+          ><input type="checkbox" id="chkTabs" /> <span id="txtTabs"></span
+        ></label>
+        <label class="line"
+          ><input type="checkbox" id="chkNotes" /> <span id="txtNotesField"></span
+        ></label>
+      </section>
+
+      <section class="card">
+        <h2 class="h2" id="lblStartup"></h2>
+        <p class="hint" id="hintStartup"></p>
+        <div class="row col">
+          <label class="line"
+            ><input type="radio" name="pstart" value="remember" /> <span id="psRemember"></span
+          ></label>
+          <label class="line"
+            ><input type="radio" name="pstart" value="show" /> <span id="psShow"></span
+          ></label>
+          <label class="line"
+            ><input type="radio" name="pstart" value="hide" /> <span id="psHide"></span
+          ></label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="h2" id="lblTabs"></h2>
+        <div class="row col">
+          <label class="line"
+            ><input type="radio" name="tabs" value="horizontal" /> <span id="tabsHoriz"></span
+          ></label>
+          <label class="line"
+            ><input type="radio" name="tabs" value="vertical" /> <span id="tabsVert"></span
+          ></label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="h2" id="lblPosition"></h2>
+        <div class="posRow">
+          <label><span id="lblRight"></span> <input type="number" id="inpRight" class="inp num" min="0" max="2000" /></label>
+          <label><span id="lblBottom"></span> <input type="number" id="inpBottom" class="inp num" min="0" max="2000" /></label>
+        </div>
+        <div class="rowBtns">
+          <button type="button" class="btn" id="btnPosBr"></button>
+          <button type="button" class="btn" id="btnPosBl"></button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="h2" id="lblHistory"></h2>
+        <label class="line" for="inpHistLimit"
+          ><span id="lblHistLimit"></span>
+          <input type="number" id="inpHistLimit" class="inp num" min="10" max="5000" step="10"
+        /></label>
+      </section>
+
+      <section class="card">
+        <h2 class="h2" id="lblSessions"></h2>
+        <label class="line" for="inpName" id="lblRename"></label>
+        <div class="sessRow">
+          <input type="text" id="inpName" class="inp" maxlength="64" />
+          <button type="button" class="btn" id="btnRename"></button>
+        </div>
+        <button type="button" class="btn danger" id="btnDelete"></button>
+      </section>
+
+      <section class="card">
+        <h2 class="h2" id="lblExport"></h2>
+        <div class="rowBtns">
+          <button type="button" class="btn" id="btnTxt"></button>
+          <button type="button" class="btn" id="btnJson"></button>
+          <button type="button" class="btn" id="btnSessFull"></button>
+        </div>
+        <p class="hint" id="hintImportSess"></p>
+        <div class="sessRow">
+          <input type="file" id="fileSess" accept=".json,application/json" class="file" />
+          <button type="button" class="btn" id="btnImportSess"></button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="h2" id="lblSettingsIO"></h2>
+        <div class="rowBtns">
+          <button type="button" class="btn" id="btnExportSettings"></button>
+          <button type="button" class="btn" id="btnImportSettings"></button>
+        </div>
+        <input type="file" id="fileSettings" accept=".txt,text/plain,application/json" class="file" />
+      </section>
+
+      <section class="card dangerCard">
+        <h2 class="h2" id="lblDanger"></h2>
+        <button type="button" class="btn danger" id="btnResetAll"></button>
+      </section>
+
+    </main>
+
+    <script src="../lib/storage-model.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>
