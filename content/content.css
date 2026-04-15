@@ -1,4 +1,4 @@
-#NoteMath-host {
+#notemath-host {
   all: initial;
   position: fixed;
   z-index: 2147483646;
@@ -6,11 +6,11 @@
   pointer-events: none;
 }
 
-#NoteMath-host * {
+#notemath-host * {
   box-sizing: border-box;
 }
 
-#NoteMath-toast-host {
+#notemath-toast-host {
   all: initial;
   position: fixed;
   z-index: 2147483647;

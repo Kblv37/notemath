@@ -16,10 +16,6 @@ chrome.commands.onCommand.addListener((command) => {
     sendToActiveTab({ type: "TOGGLE_PANEL", source: "command" });
     return;
   }
-  if (command === "new-session-tab") {
-    sendToActiveTab({ type: "NEW_SESSION", source: "command" });
-    return;
-  }
   const op = COMMAND_MAP[command];
   if (!op) return;
   sendToActiveTab({ type: "RUN_OPERATION", source: "command", op });

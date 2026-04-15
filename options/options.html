@@ -1,17 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>NoteMath — Settings</title>
+    <title>NoteMath — настройки</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
     <main class="wrap">
-      <h1 class="h1">
-        <img src="../assets/logo180x180.png" width="20" style="vertical-align:middle; margin-right:8px;" />
-        <span id="pageTitle"></span>
-      </h1>
+      <h1 class="h1" id="pageTitle"></h1>
 
       <section class="card">
         <h2 class="h2" id="lblTheme"></h2>
@@ -51,9 +48,23 @@
         <label class="line"
           ><input type="checkbox" id="chkTabs" /> <span id="txtTabs"></span
         ></label>
+      </section>
+
+      <section class="card">
+        <h2 class="h2" id="lblSmartCopy"></h2>
+        <p class="hint" id="hintSmartCopy"></p>
         <label class="line"
-          ><input type="checkbox" id="chkNotes" /> <span id="txtNotesField"></span
+          ><input type="checkbox" id="chkSmartCopyEnabled" /> <span id="txtSmartCopyEnabled"></span
         ></label>
+        <div class="smartCopyGroup">
+          <div class="smartCopyTitle" id="lblSmartCopyButtons"></div>
+          <div class="smartCopyGrid">
+            <label class="line"><input type="checkbox" id="chkSmartCopyAdd" /> <span id="txtSmartCopyAdd"></span></label>
+            <label class="line"><input type="checkbox" id="chkSmartCopySubtract" /> <span id="txtSmartCopySubtract"></span></label>
+            <label class="line"><input type="checkbox" id="chkSmartCopyMultiply" /> <span id="txtSmartCopyMultiply"></span></label>
+            <label class="line"><input type="checkbox" id="chkSmartCopyDivide" /> <span id="txtSmartCopyDivide"></span></label>
+          </div>
+        </div>
       </section>
 
       <section class="card">

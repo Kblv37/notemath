@@ -22,7 +22,7 @@
 }
 
 body {
-  width: 320px;
+  width: 392px;
   margin: 0;
   padding: 12px 14px 14px;
   font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -61,10 +61,6 @@ body {
   padding: 4px;
 }
 
-.row {
-  margin-bottom: 10px;
-}
-
 .lbl {
   display: block;
   font-size: 11px;
@@ -72,19 +68,16 @@ body {
   margin-bottom: 4px;
 }
 
-.sess {
-  display: flex;
-  gap: 6px;
+.notesNav {
+  margin-bottom: 10px;
 }
 
-select {
-  flex: 1;
-  min-width: 0;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--bd);
-  background: transparent;
-  color: inherit;
+.notesNavHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .expr {
@@ -137,11 +130,59 @@ select {
   white-space: pre-wrap;
 }
 
+.notesBox {
+  margin-top: 12px;
+}
+
+.notesHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.noteState {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.notes {
+  width: 100%;
+  min-height: 84px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--bd);
+  background: transparent;
+  color: inherit;
+  font: 12px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  resize: vertical;
+}
+
+.notes:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  outline-offset: 0;
+}
+
+.noteHint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
+}
+
+.footerActions {
+  margin-top: 10px;
+}
+
+.footerActions .btn {
+  width: 100%;
 }
 
 .btn {
@@ -154,6 +195,17 @@ select {
   cursor: pointer;
 }
 
+.btn.icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}
+
 .btn:hover {
   filter: brightness(1.06);
 }
@@ -162,6 +214,78 @@ select {
   background: var(--accent);
   color: #fff;
   border-color: transparent;
+}
+
+.noteTabs {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0 8px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.noteTab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--bd);
+  background: transparent;
+  overflow: hidden;
+}
+
+.noteTabBtn,
+.noteTabClose {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 7px 10px;
+  font: inherit;
+}
+
+.noteTabBtn {
+  max-width: 160px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.noteTabClose {
+  width: 30px;
+  padding: 0;
+  border-left: 1px solid var(--bd);
+  opacity: 0.72;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.noteTab:hover {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.noteTab.active {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--bd));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.noteTab.active .noteTabBtn {
+  font-weight: 600;
+}
+
+.noteEdit {
+  display: grid;
+  gap: 8px;
+}
+
+.noteEditActions {
+  display: flex;
+  gap: 6px;
+}
+
+.noteEditActions .btn {
+  flex: 1;
 }
 
 .chk {

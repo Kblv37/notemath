@@ -26,14 +26,16 @@
   let toastShadow = null;
   let dragState = null;
   let saveTimer = null;
-  let notesTimer = null;
   let hotkeyTimer = null;
   let pendingHotkeyOp = null;
   let hotkeySeq = 0;
+  let smartCopyCopySeq = 0;
+  let clipboardFlashUntil = 0;
   let disposed = false;
   let panelKeydownBound = false;
   let themeMediaQuery = null;
   let dragRaf = null;
+  const isTopFrame = window.top === window;
 
   function isContextInvalidatedError(err) {
     return err?.code === "CONTEXT_INVALIDATED" || String(err?.message ?? err).includes("Extension context invalidated");
@@ -50,14 +52,13 @@
     if (disposed) return;
     disposed = true;
     clearTimeout(saveTimer);
-    clearTimeout(notesTimer);
     clearTimeout(hotkeyTimer);
     clearTimeout(toastTimer);
     if (dragRaf != null) {
       cancelAnimationFrame(dragRaf);
       dragRaf = null;
     }
-    saveTimer = notesTimer = hotkeyTimer = toastTimer = null;
+    saveTimer = hotkeyTimer = toastTimer = null;
     dragState = null;
     try {
       chrome.storage.onChanged.removeListener(onChromeStorageChanged);
@@ -68,6 +69,7 @@
     } catch {
     }
     window.removeEventListener("keydown", onKeyDown, true);
+    window.removeEventListener("copy", captureCopiedText, true);
     window.removeEventListener("resize", onWindowResize);
     window.removeEventListener("click", onWindowClickForMenu, true);
     if (themeMediaQuery) {
@@ -139,6 +141,7 @@
   }
 
   function onWindowClickForMenu(e) {
+    if (!isTopFrame) return;
     if (!host) return;
     const path = typeof e.composedPath === "function" ? e.composedPath() : [];
     if (!path.includes(host)) closeMoreMenu();
@@ -157,17 +160,6 @@
     }, 120);
   }
 
-  function debouncedNotesSave(text) {
-    clearTimeout(notesTimer);
-    notesTimer = setTimeout(() => {
-      notesTimer = null;
-      const sess = activeSession();
-      if (!sess) return;
-      sess.notes = text;
-      persistStateToStorage();
-    }, 280);
-  }
-
   function activeSession() {
     if (!state) return null;
     return state.sessions.find((s) => s.id === state.activeSessionId) || state.sessions[0];
@@ -184,6 +176,8 @@
   function isRestrictedPage() {
     const p = location.protocol || "";
     const h = location.hostname || "";
+    const ct = String(document.contentType || "").toLowerCase();
+    if (ct.includes("pdf")) return false;
     if (
       p === "chrome-extension:" ||
       p === "chrome:" ||
@@ -222,18 +216,36 @@
   }
 
   function getSelectionText() {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return "";
-    return sel.toString().trim();
+    function readSelectionFrom(win, depth) {
+      if (!win || depth > 4) return "";
+      try {
+        const sel = win.getSelection?.();
+        const text = sel ? String(sel.toString()).trim() : "";
+        if (text) return text;
+      } catch {
+      }
+      try {
+        const docSel = win.document?.getSelection?.();
+        const text = docSel ? String(docSel.toString()).trim() : "";
+        if (text) return text;
+      } catch {
+      }
+      try {
+        const frames = win.frames;
+        for (let i = 0; i < frames.length; i++) {
+          const text = readSelectionFrom(frames[i], depth + 1);
+          if (text) return text;
+        }
+      } catch {
+      }
+      return "";
+    }
+
+    return readSelectionFrom(window, 0);
   }
 
   function formatNumber(n) {
-    if (n == null || !Number.isFinite(n)) return "";
-    try {
-      return new Intl.NumberFormat(undefined, { maximumFractionDigits: 10 }).format(n);
-    } catch {
-      return String(n);
-    }
+    return CalcMath?.formatNumber ? CalcMath.formatNumber(n) : String(n);
   }
 
   function formatPlain(n) {
@@ -249,6 +261,179 @@
     const frac = dot >= 0 ? raw.slice(dot) : "";
     const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
     return (neg ? "−" : "") + grouped + frac;
+  }
+
+  function sessionDisplayDecimals(sess) {
+    return Number.isInteger(sess?.displayDecimals) && sess.displayDecimals >= 0 ? sess.displayDecimals : null;
+  }
+
+  function setSessionResult(sess, value, precision) {
+    if (!sess) return;
+    sess.total = value;
+    sess.displayDecimals = Number.isInteger(precision) ? Math.max(0, Math.min(CalcMath.MAX_DECIMALS, precision)) : null;
+  }
+
+  function normalizeFloatResult(value, minimumDecimals) {
+    return CalcMath.safeFloatResult(value, minimumDecimals, CalcMath.MAX_DECIMALS);
+  }
+
+  function parseSmartCopyValue(raw, ctxTotal) {
+    const text = String(raw ?? "").trim();
+    if (!text) return null;
+    let value;
+    try {
+      value = parseOperand(text, ctxTotal);
+    } catch {
+      return null;
+    }
+    if (!Number.isFinite(value)) return null;
+    const precisionHint = CalcMath.decimalPlacesFromText(text);
+    const normalized = normalizeFloatResult(value, precisionHint);
+    return {
+      raw: text,
+      value: normalized.value,
+      precision: normalized.precision,
+    };
+  }
+
+  function smartCopySettings() {
+    return state?.settings?.smartCopyPanel || CalcStorageModel.defaultSettings().smartCopyPanel;
+  }
+
+  function normalizeSmartCopyOp(op) {
+    return ["add", "subtract", "multiply", "divide"].includes(op) ? op : "add";
+  }
+
+  function smartCopyEnabled() {
+    return smartCopySettings().enabled !== false;
+  }
+
+  function smartCopyButtons() {
+    const buttons = smartCopySettings().buttons || {};
+    return [
+      { op: "add", label: "+", title: MSG("smartCopyAdd") },
+      { op: "subtract", label: "−", title: MSG("smartCopySubtract") },
+      { op: "multiply", label: "×", title: MSG("smartCopyMultiply") },
+      { op: "divide", label: "÷", title: MSG("smartCopyDivide") },
+    ].filter((btn) => buttons[btn.op] !== false);
+  }
+
+  function smartCopyEnabledOnPage() {
+    return smartCopyEnabled() && !isSiteDisabled();
+  }
+
+  function clipboardRawValue() {
+    return String(state?.lastCopiedValue ?? "").trim();
+  }
+
+  function parseClipboardValue(sess) {
+    const raw = clipboardRawValue();
+    if (!raw) return null;
+    return parseSmartCopyValue(raw, sess?.total);
+  }
+
+  async function readClipboardTextSafe() {
+    const delays = [0, 36, 72];
+    let last = "";
+    for (let i = 0; i < delays.length; i++) {
+      const delay = delays[i];
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      try {
+        const text = await navigator.clipboard.readText();
+        if (String(text || "").trim()) return text;
+        last = text || "";
+      } catch {
+      }
+    }
+    return last;
+  }
+
+  function syncMainInputFromClipboard(parsed) {
+    const sess = activeSession();
+    if (!sess) return;
+    const inp = getMainInput();
+    const text = formatNumber(parsed.value, parsed.precision);
+    sess.calcDraft = text;
+    if (inp) {
+      inp.value = text;
+      syncDisplaySubline();
+    }
+    debouncedSave();
+  }
+
+  async function captureCopiedText() {
+    if (!smartCopyEnabledOnPage()) return;
+    const seq = ++smartCopyCopySeq;
+    let text = "";
+    try {
+      text = await readClipboardTextSafe();
+    } catch {
+      try {
+        text = getSelectionText();
+      } catch {
+      }
+    }
+    if (seq !== smartCopyCopySeq || disposed || !state) return;
+    state.lastCopiedValue = String(text || "").trim();
+    clipboardFlashUntil = Date.now() + 700;
+    debouncedSave();
+    renderPanel();
+  }
+
+  function shouldInterceptSmartCopyPaste(ev) {
+    if (!smartCopyEnabledOnPage()) return false;
+    if (!effectiveShowPanel()) return false;
+    const settings = smartCopySettings();
+    const key = String(ev.key || "").toLowerCase();
+    const ctrlPaste = settings.interceptCtrlV !== false && (ev.ctrlKey || ev.metaKey) && !ev.altKey && key === "v";
+    const altPaste = settings.fallbackAltV !== false && ev.altKey && !ev.ctrlKey && !ev.metaKey && key === "v";
+    return ctrlPaste || altPaste;
+  }
+
+  function handleSmartCopyPaste(ev) {
+    if (!shouldInterceptSmartCopyPaste(ev)) return false;
+    if (isEditableFocused() && !isFocusInsidePanel()) return false;
+    ev.preventDefault();
+    ev.stopPropagation();
+
+    void (async () => {
+      const seq = ++smartCopyCopySeq;
+      let text = "";
+      try {
+        text = await readClipboardTextSafe();
+      } catch {
+        text = "";
+      }
+      if (disposed || seq !== smartCopyCopySeq) return;
+      const parsed = parseSmartCopyValue(text, activeSession()?.total);
+      if (!state) return;
+      state.lastCopiedValue = String(text || "").trim();
+      clipboardFlashUntil = Date.now() + 700;
+      debouncedSave();
+      renderPanel();
+      if (!parsed) {
+        showToast(MSG("smartCopyNoValue"), "error");
+        return;
+      }
+      syncMainInputFromClipboard(parsed);
+    })();
+    return true;
+  }
+
+  function applySmartCopyOperation(op) {
+    if (!smartCopyEnabledOnPage()) return;
+    const sess = activeSession();
+    const parsed = parseClipboardValue(sess);
+    if (!parsed || !Number.isFinite(parsed.value)) {
+      showToast(MSG("smartCopyNoValue"), "error");
+      return;
+    }
+    applyOperation(normalizeSmartCopyOp(op), parsed.raw, {
+      value: parsed.value,
+      precision: parsed.precision,
+    });
   }
 
   function previewNumericValue(sess, raw) {
@@ -287,6 +472,10 @@
     else sess.calcDraft = "";
   }
 
+  function getSessionPrecision(sess) {
+    return sessionDisplayDecimals(sess);
+  }
+
   function trimHistory(sess) {
     const lim = Math.max(10, Math.min(5000, state.settings.historyLimit | 0 || 200));
     if (sess.history.length > lim) {
@@ -297,6 +486,7 @@
   function snapshotSession(sess) {
     return {
       total: sess.total,
+      displayDecimals: sess.displayDecimals,
       initialized: sess.initialized,
       history: sess.history.map((h) => Object.assign({}, h)),
       calcDraft: sess.calcDraft != null ? String(sess.calcDraft) : "",
@@ -330,8 +520,8 @@
     renderPanel();
   }
 
-  function applyOperation(op, rawOverride) {
-    if (op !== "add" && op !== "subtract") return;
+  function applyOperation(op, rawOverride, meta) {
+    if (!["add", "subtract", "multiply", "divide"].includes(op)) return;
     const sess = activeSession();
     if (!sess) return;
     clearRedoStack(state, sess.id);
@@ -355,46 +545,64 @@
 
     pushUndo(sess);
 
-    const sym = op === "add" ? "+" : "−";
+    const currentPrecision = getSessionPrecision(sess);
+    const operandPrecision =
+      meta && Number.isInteger(meta.precision)
+        ? Math.max(0, Math.min(CalcMath.MAX_DECIMALS, meta.precision))
+        : CalcMath.decimalPlacesFromText(raw);
+    const basePrecision = Math.max(currentPrecision ?? 0, operandPrecision ?? 0);
+    const symMap = {
+      add: "+",
+      subtract: "−",
+      multiply: "×",
+      divide: "÷",
+    };
+    const sym = symMap[op];
     let label = "";
     let nextTotal;
+    let precision = basePrecision;
 
     if (!sess.initialized) {
-      if (op === "add") {
-        nextTotal = operand;
-        label = `${sym}${formatPlain(operand)}`;
-      } else {
+      if (op === "subtract") {
         nextTotal = 0 - operand;
-        label = `${sym}${formatPlain(operand)}`;
+      } else {
+        nextTotal = operand;
       }
       sess.initialized = true;
     } else {
       const cur = sess.total;
       if (op === "add") nextTotal = cur + operand;
-      else nextTotal = cur - operand;
-      label = `${sym}${formatPlain(operand)}`;
+      else if (op === "subtract") nextTotal = cur - operand;
+      else if (op === "multiply") nextTotal = cur * operand;
+      else nextTotal = operand === 0 ? NaN : cur / operand;
     }
 
+    const normalized = normalizeFloatResult(nextTotal, precision);
+    precision = normalized.precision;
+    nextTotal = normalized.value;
+
     if (!Number.isFinite(nextTotal)) {
-      showToast(MSG("errNoNumber"), "error");
+      showToast(op === "divide" && operand === 0 ? MSG("errDivZero") : MSG("errNoNumber"), "error");
       ensureUndoStack(state, sess.id).pop();
       return;
     }
 
-    sess.total = nextTotal;
+    setSessionResult(sess, nextTotal, precision);
+    label = `${sym}${formatNumber(operand, operandPrecision ?? precision)}`;
     sess.history.push({
       op,
       label,
       operand,
       raw,
       result: nextTotal,
+      precision,
       t: Date.now(),
     });
     trimHistory(sess);
-    sess.calcDraft = formatPlain(nextTotal);
+    sess.calcDraft = formatNumber(nextTotal, precision);
     debouncedSave();
     renderPanel();
-    showToast(`${label} → ${formatNumber(nextTotal)}`, "ok");
+    showToast(`${label} → ${formatNumber(nextTotal, precision)}`, "ok");
   }
 
   function undoLast() {
@@ -409,6 +617,7 @@
     const redo = ensureRedoStack(state, sess.id);
     redo.push(snapshotSession(sess));
     sess.total = prev.total;
+    sess.displayDecimals = prev.displayDecimals ?? null;
     sess.initialized = prev.initialized;
     sess.history = prev.history;
     sess.calcDraft = prev.calcDraft != null ? prev.calcDraft : "";
@@ -428,6 +637,7 @@
     }
     pushUndo(sess);
     sess.total = next.total;
+    sess.displayDecimals = next.displayDecimals ?? null;
     sess.initialized = next.initialized;
     sess.history = next.history;
     sess.calcDraft = next.calcDraft != null ? next.calcDraft : "";
@@ -442,6 +652,7 @@
     clearRedoStack(state, sess.id);
     pushUndo(sess);
     sess.total = null;
+    sess.displayDecimals = null;
     sess.initialized = false;
     sess.history = [];
     sess.calcDraft = "";
@@ -484,7 +695,7 @@
       showToast(MSG("errNoNumber"), "error");
       return;
     }
-    const text = String(sess.total);
+    const text = formatNumber(sess.total, sessionDisplayDecimals(sess));
     try {
       await navigator.clipboard.writeText(text);
       showToast(MSG("copied"), "ok");
@@ -500,7 +711,7 @@
         document.body.removeChild(ta);
         showToast(MSG("copied"), "ok");
       } catch {
-        showToast("Copy failed", "error");
+        showToast(MSG("smartCopyCopyFailed"), "error");
       }
     }
   }
@@ -539,11 +750,15 @@
   }
 
   function exportHistoryTxt(sess) {
-    const lines = (sess.history || []).map((h) => {
+    const lines = [];
+    lines.push(`${MSG("session")}: ${sess.name || MSG("session")}`);
+    lines.push("");
+    (sess.history || []).forEach((h) => {
       const note = h.raw && String(h.raw) !== String(h.label) ? ` (${h.raw})` : "";
-      return `${h.label}${note}`;
+      lines.push(`${h.label}${note}`);
     });
-    lines.push(`= ${formatNumber(sess.total) || "0"}`);
+    if ((sess.history || []).length) lines.push("");
+    lines.push(`${MSG("total")}: ${formatNumber(sess.total, sessionDisplayDecimals(sess)) || "0"}`);
     return lines.join("\n");
   }
 
@@ -560,12 +775,13 @@
 
   function exportSessionFull(sess) {
     const payload = {
-      type: "NoteMath-session",
+      type: "notemath-session",
       version: 1,
       exportedAt: new Date().toISOString(),
       session: {
         name: sess.name,
         total: sess.total,
+        displayDecimals: sess.displayDecimals ?? null,
         initialized: sess.initialized,
         history: sess.history,
         notes: sess.notes || "",
@@ -574,7 +790,7 @@
       },
     };
     downloadInPage(
-      `NoteMath-session-${(sess.name || "session").replace(/\W+/g, "_")}.json`,
+      `notemath-note-full-${(sess.name || "note").replace(/\W+/g, "_")}.json`,
       JSON.stringify(payload, null, 2),
       "application/json"
     );
@@ -599,6 +815,8 @@
     pushUndo(sess);
     sess.name = String(inner.name || sess.name).slice(0, 64);
     sess.total = inner.total != null ? Number(inner.total) : null;
+    sess.displayDecimals =
+      inner.displayDecimals != null ? Math.max(0, Math.min(CalcMath.MAX_DECIMALS, Number(inner.displayDecimals) || 0)) : null;
     sess.initialized = !!inner.initialized;
     sess.history = Array.isArray(inner.history) ? inner.history : [];
     sess.notes = typeof inner.notes === "string" ? inner.notes : "";
@@ -686,20 +904,22 @@
       const ctx = sess.total != null && Number.isFinite(sess.total) ? sess.total : 0;
       const v = evaluateExpression(expr, ctx);
       if (!Number.isFinite(v)) throw new Error("x");
+      const normalized = normalizeFloatResult(v, CalcMath.decimalPlacesFromText(raw));
       clearRedoStack(state, sess.id);
       pushUndo(sess);
       sess.initialized = true;
-      sess.total = v;
+      setSessionResult(sess, normalized.value, normalized.precision);
       sess.history.push({
         op: "add",
         label: `=${raw}`,
-        operand: v,
+        operand: normalized.value,
         raw,
-        result: v,
+        result: normalized.value,
+        precision: normalized.precision,
         t: Date.now(),
       });
       trimHistory(sess);
-      sess.calcDraft = formatPlain(v);
+      sess.calcDraft = formatNumber(normalized.value, normalized.precision);
       debouncedSave();
       renderPanel();
     } catch {
@@ -734,22 +954,24 @@
     clearRedoStack(state, sess.id);
     pushUndo(sess);
     const old = sess.total;
-    const next = old * (1 + pct / 100);
+    const normalized = normalizeFloatResult(old * (1 + pct / 100), getSessionPrecision(sess) ?? 0);
+    const next = normalized.value;
     const label = `${pct > 0 ? "+" : ""}${pct}%`;
-    sess.total = next;
+    setSessionResult(sess, next, normalized.precision);
     sess.history.push({
       op: "add",
       label,
       operand: next - old,
       raw: label,
       result: next,
+      precision: normalized.precision,
       t: Date.now(),
     });
     trimHistory(sess);
-    sess.calcDraft = formatPlain(next);
+    sess.calcDraft = formatNumber(next, normalized.precision);
     debouncedSave();
     renderPanel();
-    showToast(`${label} → ${formatNumber(next)}`, "ok");
+    showToast(`${label} → ${formatNumber(next, normalized.precision)}`, "ok");
   }
 
   function calcSquare() {
@@ -761,7 +983,9 @@
       const ctx = sess.total != null && Number.isFinite(sess.total) ? sess.total : 0;
       const v = evaluateExpression(`(${normalizeDraftForEval(sess, raw)})^2`, ctx);
       if (!Number.isFinite(v)) throw new Error("x");
-      sess.calcDraft = formatPlain(v);
+      const normalized = normalizeFloatResult(v, CalcMath.decimalPlacesFromText(raw));
+      sess.calcDraft = formatNumber(normalized.value, normalized.precision);
+      sess.displayDecimals = normalized.precision;
       debouncedSave();
       renderPanel();
     } catch {
@@ -778,7 +1002,9 @@
       const ctx = sess.total != null && Number.isFinite(sess.total) ? sess.total : 0;
       const v = evaluateExpression(`√(${normalizeDraftForEval(sess, raw)})`, ctx);
       if (!Number.isFinite(v)) throw new Error("x");
-      sess.calcDraft = formatPlain(v);
+      const normalized = normalizeFloatResult(v, CalcMath.decimalPlacesFromText(raw));
+      sess.calcDraft = formatNumber(normalized.value, normalized.precision);
+      sess.displayDecimals = normalized.precision;
       debouncedSave();
       renderPanel();
     } catch {
@@ -833,27 +1059,10 @@
     renderPanel();
   }
 
-  function toggleNotesCollapsed() {
-    state.settings.notesCollapsed = !state.settings.notesCollapsed;
-    debouncedSave();
-    renderPanel();
-  }
-
   function toggleShowCalculatorSetting() {
     state.settings.showCalculator = state.settings.showCalculator === false;
     debouncedSave();
     renderPanel();
-  }
-
-  function toggleShowNotesSetting() {
-    state.settings.showNotes = state.settings.showNotes === false;
-    debouncedSave();
-    renderPanel();
-  }
-
-  function onSessionSelectChange(e) {
-    const id = e.target.value;
-    if (id) switchSession(id);
   }
 
   function positionMoreMenu() {
@@ -917,15 +1126,30 @@
       .slice(-12)
       .map((h) => h.label)
       .join("\n");
+    const miniHistLines = histAll
+      .slice(-4)
+      .map((h) => `${h.label}${h.raw && String(h.raw) !== String(h.label) ? ` (${h.raw})` : ""}`)
+      .join("\n");
 
     const vertTabs = state.settings.tabsLayout === "vertical";
     const pinOn = state.settings.panelPinned;
     const minOn = state.settings.panelMinimized;
     const showCalc = state.settings.showCalculator !== false;
     const calcCollapsed = !!state.settings.calculatorCollapsed;
-    const notesCollapsed = !!state.settings.notesCollapsed;
     const showTabs = state.settings.showSessionTabs !== false;
-    const showNotes = state.settings.showNotes !== false;
+    const totalPrecision = sessionDisplayDecimals(sess);
+    const clipboardEnabled = smartCopyEnabledOnPage();
+    const clipboardButtons = smartCopyButtons();
+    const clipboardRaw = clipboardRawValue();
+    const clipboardParsed = parseClipboardValue(sess);
+    const clipboardState = !clipboardRaw ? "empty" : clipboardParsed ? "valid" : "invalid";
+    const clipboardPulse = Date.now() < clipboardFlashUntil ? " pulse" : "";
+    const clipboardText =
+      clipboardState === "empty"
+        ? MSG("clipboardEmpty")
+        : clipboardState === "invalid"
+          ? MSG("clipboardInvalid")
+          : clipboardRaw;
 
     const tabsHtml = state.sessions
       .map((s) => {
@@ -934,21 +1158,33 @@
       })
       .join("");
 
-    const sessionOptionsHtml = state.sessions
-      .map((s) => {
-        const sel = s.id === state.activeSessionId ? " selected" : "";
-        return `<option value="${escapeHtml(s.id)}"${sel}>${escapeHtml(s.name)}</option>`;
-      })
-      .join("");
-
     const icoCalc = `<svg class="ico" width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 2h4.5v4.5H2V2zm7.5 0H14v4.5H9.5V2zM2 9.5h4.5V14H2V9.5zm7.5 0H14V14H9.5V9.5z"/></svg>`;
-    const icoNotes = `<svg class="ico" width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 4h10v1.2H3V4zm0 3.4h10v1.2H3V7.4zm0 3.4h7v1.2H3v-1.2z"/></svg>`;
     const icoPin = `<svg class="ico" width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1.6c-.7 0-1.3.6-1.3 1.3v2.5L4.3 11h2.1v2.9h3.2V11h2.1L9.3 5.4V2.9c0-.7-.6-1.3-1.3-1.3z"/></svg>`;
     const icoMin = `<svg class="ico" width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 8.2h10v1H3v-1z"/></svg>`;
     const icoRestore = `<svg class="ico" width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3.5 5h9v7h-9V5zm1 1v5h7V6h-7z"/></svg>`;
     const icoClose = `<svg class="ico" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>`;
     const chevDown = `<svg class="ico ico-chev" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 5.5l4 4 4-4H4z"/></svg>`;
     const chevEnd = `<svg class="ico ico-chev" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.5 4l4 4-4 4V4z"/></svg>`;
+    const clipboardOpsHtml = clipboardButtons
+      .map(
+        (btn) =>
+          `<button type="button" class="btn sm clip-op" data-clip-op="${btn.op}" title="${escapeHtml(btn.title)}">${escapeHtml(btn.label)}</button>`
+      )
+      .join("");
+    const clipboardMiniOpsHtml = clipboardButtons
+      .map(
+        (btn) =>
+          `<button type="button" class="btn icon clip-op-mini" data-clip-op="${btn.op}" title="${escapeHtml(btn.title)}">${escapeHtml(btn.label)}</button>`
+      )
+      .join("");
+    const clipboardBlockHtml =
+      clipboardEnabled && clipboardButtons.length
+        ? `<div class="clip-block">
+            <div class="clip-lbl">${escapeHtml(MSG("clipboardLastCopied"))}</div>
+            <div class="clip-value ${clipboardState}${clipboardPulse}" title="${escapeHtml(clipboardRaw || "")}">${escapeHtml(clipboardText)}</div>
+            <div class="clip-ops">${clipboardOpsHtml}</div>
+          </div>`
+        : "";
 
     const calcBoardHtml = showCalc
       ? `
@@ -978,6 +1214,7 @@
         <button type="button" class="key op wide" data-calc="=">=</button>
       </div>
       <div class="calc-row2">
+        <button type="button" class="btn sm" data-act="bksp">${escapeHtml(MSG("backspaceOne"))}</button>
         <button type="button" class="btn sm" data-act="pctplus">+10%</button>
         <button type="button" class="btn sm" data-act="pctminus">−10%</button>
         <button type="button" class="btn sm" data-act="sq">x²</button>
@@ -1048,20 +1285,6 @@
           gap: 4px;
           margin-${vertTabs ? "top" : "left"}: auto;
           flex-shrink: 0;
-        }
-        .sess-inline {
-          padding: 8px 12px;
-          border-bottom: ${st.bd};
-          background: ${st.surface};
-        }
-        .sess-inline select {
-          width: 100%;
-          padding: 8px 10px;
-          border-radius: 8px;
-          border: ${st.bd};
-          background: ${st.dark ? "rgba(0,0,0,.25)" : "#fff"};
-          color: inherit;
-          font: inherit;
         }
         .maincol { flex: 1; min-width: 0; display: flex; flex-direction: column; }
         .panel-top {
@@ -1168,42 +1391,67 @@
           white-space: pre-wrap;
           line-height: 1.45;
         }
-        .notes-section { margin-bottom: 10px; }
-        .notes-head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          margin-bottom: 6px;
-        }
-        .notes-head .nh-lbl {
-          font-size: 10px;
-          text-transform: uppercase;
-          letter-spacing: .08em;
-          color: ${st.muted};
-        }
-        .notes-collapse {
-          display: grid;
-          grid-template-rows: 0fr;
-          transition: grid-template-rows .24s ease;
-        }
-        .notes-collapse.expanded { grid-template-rows: 1fr; }
-        .notes-collapse-inner { min-height: 0; overflow: hidden; }
-        .notes {
-          width: 100%;
-          min-height: 52px;
-          resize: vertical;
-          border-radius: 8px;
+        .clip-block {
+          border-radius: 10px;
           border: ${st.bd};
           padding: 8px 10px;
-          font: 12px/1.4 system-ui, sans-serif;
-          background: ${st.dark ? "rgba(0,0,0,.28)" : "#fff"};
-          color: inherit;
-          margin-bottom: 0;
-          transition: border-color .15s ease;
+          margin-bottom: 10px;
+          background: ${st.dark ? "rgba(255,255,255,.02)" : "rgba(0,0,0,.01)"};
         }
-        .notes:focus { border-color: ${st.accent}; outline: none; }
-        .notes::placeholder { color: ${st.muted}; }
+        .clip-lbl {
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: .06em;
+          color: ${st.muted};
+          margin-bottom: 4px;
+        }
+        .clip-value {
+          border-radius: 8px;
+          padding: 7px 9px;
+          margin-bottom: 8px;
+          font: 600 12px/1.3 ui-monospace, "SF Mono", Consolas, monospace;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          border: 1px solid transparent;
+          transition: background .18s ease, border-color .18s ease, box-shadow .18s ease;
+        }
+        .clip-value.empty {
+          background: ${st.dark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.05)"};
+          color: ${st.muted};
+        }
+        .clip-value.valid {
+          background: ${st.dark ? "rgba(60,160,90,.22)" : "rgba(46,125,50,.12)"};
+          border-color: ${st.dark ? "rgba(80,190,120,.38)" : "rgba(46,125,50,.28)"};
+          color: ${st.dark ? "#c8f5d7" : "#1b5e20"};
+        }
+        .clip-value.invalid {
+          background: ${st.dark ? "rgba(210,90,90,.2)" : "rgba(198,40,40,.11)"};
+          border-color: ${st.dark ? "rgba(230,120,120,.38)" : "rgba(198,40,40,.28)"};
+          color: ${st.dark ? "#ffd4d4" : "#8e1c1c"};
+        }
+        .clip-value.pulse {
+          animation: clipPulse .32s ease;
+        }
+        .clip-ops {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        .clip-op {
+          min-width: 34px;
+          font-weight: 700;
+          padding: 5px 10px;
+        }
+        .clip-op-mini {
+          min-width: 30px;
+          padding: 6px 8px;
+          font-weight: 700;
+        }
+        @keyframes clipPulse {
+          0% { box-shadow: 0 0 0 0 ${st.dark ? "rgba(120,190,255,.42)" : "rgba(0,120,212,.24)"}; }
+          100% { box-shadow: 0 0 0 8px transparent; }
+        }
         .toolbar {
           display: flex;
           flex-wrap: wrap;
@@ -1299,15 +1547,52 @@
         .key.op { background: ${st.keyOp}; font-weight: 600; }
         .key.wide { grid-column: span 2; }
         .calc-row2 { display: flex; flex-wrap: wrap; gap: 6px; }
-        .min-body { padding: 12px 14px; }
-        .min-body .val { font-size: 20px; font-weight: 600; font-family: ui-monospace, monospace; letter-spacing: -0.02em; }
-        .min-body .val-sub {
+        .min-body {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          padding: 12px 14px 14px;
+        }
+        .min-total {
+          font-size: 20px;
+          font-weight: 700;
+          font-family: ui-monospace, monospace;
+          letter-spacing: -0.02em;
+          line-height: 1.1;
+        }
+        .min-total-sub {
           font-size: 11px;
           font-family: ui-monospace, monospace;
           color: ${st.muted};
-          margin-top: 5px;
           letter-spacing: 0.02em;
           line-height: 1.3;
+        }
+        .min-history {
+          border-radius: 10px;
+          border: ${st.bd};
+          padding: 8px 10px;
+          background: ${st.dark ? "rgba(0,0,0,.18)" : "rgba(0,0,0,.02)"};
+        }
+        .min-history .mh-lbl {
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: .06em;
+          color: ${st.muted};
+          margin-bottom: 4px;
+        }
+        .min-history .mh-lines {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 10px;
+          white-space: pre-wrap;
+          line-height: 1.45;
+          color: ${st.muted};
+        }
+        .min-actions {
+          display: flex;
+          gap: 6px;
+        }
+        .min-actions .btn {
+          flex: 1;
         }
         input[type="file"] { display: none; }
       </style>
@@ -1321,16 +1606,13 @@
             <button type="button" class="iconbtn sm" data-act="tabdel" title="${escapeHtml(MSG("deleteSession"))}">×</button>
           </div>
         </div>`
-            : `<div class="sess-inline">
-          <select id="pc-sess-sel" aria-label="${escapeHtml(MSG("session"))}">${sessionOptionsHtml}</select>
-        </div>`
+            : ""
         }
         <div class="maincol">
           <div class="panel-top" id="pc-drag">
             <span class="panel-brand">${escapeHtml(MSG("widgetTitle"))}</span>
             <div class="panel-actions">
               <button type="button" class="iconbtn sm${showCalc && !calcCollapsed ? " on" : ""}" data-act="togglecalcvis" title="${escapeHtml(MSG("toggleCalcKeys"))}">${icoCalc}</button>
-              <button type="button" class="iconbtn sm${showNotes !== false ? " on" : ""}" data-act="togglenotesvis" title="${escapeHtml(MSG("toggleNotesBtn"))}">${icoNotes}</button>
               <button type="button" class="iconbtn sm${pinOn ? " on" : ""}" data-act="pin" title="${escapeHtml(MSG("pin"))}">${icoPin}</button>
               <button type="button" class="iconbtn sm" data-act="min" title="${escapeHtml(minOn ? MSG("expand") : MSG("minimize"))}">${minOn ? icoRestore : icoMin}</button>
               <button type="button" class="iconbtn sm" data-act="close" title="${escapeHtml(MSG("closePanel"))}">${icoClose}</button>
@@ -1338,33 +1620,32 @@
           </div>
           ${
             minOn
-              ? `<div class="min-body"><div class="val">${escapeHtml(totalNum != null ? formatPlain(totalNum) : "0")}</div><div class="val-sub">${escapeHtml(totalNum != null ? formatNumberSpaced(totalNum) : "")}</div></div>`
+              ? `<div class="min-body">
+              <div class="min-total">${escapeHtml(totalNum != null ? formatNumber(totalNum, totalPrecision) : "0")}</div>
+              <div class="min-total-sub">${escapeHtml(totalNum != null ? formatNumberSpaced(totalNum) : "")}</div>
+              <div class="min-history">
+                <div class="mh-lbl">${escapeHtml(MSG("history"))}</div>
+                <div class="mh-lines">${escapeHtml(miniHistLines || MSG("historyEmpty"))}</div>
+              </div>
+              ${clipboardBlockHtml}
+              <div class="min-actions">
+                <button type="button" class="btn icon" data-act="undo" title="${escapeHtml(MSG("undo"))}">↶</button>
+                <button type="button" class="btn icon" data-act="redo" title="${escapeHtml(MSG("redo"))}">↷</button>
+                ${clipboardEnabled && clipboardButtons.length ? clipboardMiniOpsHtml : ""}
+              </div>
+            </div>`
               : `<div class="body">
             <div class="display-wrap">
               <div class="display-lbl">${escapeHtml(MSG("total"))}</div>
               <input type="text" class="main-display" id="pc-calc-input" autocomplete="off" spellcheck="false" inputmode="decimal" placeholder="0" />
               <div class="display-sub" id="pc-display-sub" aria-hidden="true"></div>
             </div>
-            <div class="last-line">${escapeHtml(last ? `${last.label} → ${formatNumber(last.result)}` : "")}</div>
+            <div class="last-line">${escapeHtml(last ? `${last.label} → ${formatNumber(last.result, last.precision ?? totalPrecision)}` : "")}</div>
             <div class="block-hist">
               <div class="hl">${escapeHtml(MSG("history"))}</div>
               <div class="lines">${escapeHtml(histLines || MSG("historyEmpty"))}</div>
             </div>
-            ${
-              showNotes
-                ? `<div class="notes-section">
-              <div class="notes-head">
-                <span class="nh-lbl">${escapeHtml(MSG("notesTitle"))}</span>
-                <button type="button" class="iconbtn sm" data-act="notestoggle" title="${escapeHtml(MSG("toggleNotesCollapse"))}">${notesCollapsed ? chevEnd : chevDown}</button>
-              </div>
-              <div class="notes-collapse${notesCollapsed ? "" : " expanded"}">
-                <div class="notes-collapse-inner">
-                  <textarea class="notes" id="pc-notes" placeholder="${escapeHtml(MSG("notesPlaceholder"))}">${escapeHtml(sess?.notes || "")}</textarea>
-                </div>
-              </div>
-            </div>`
-                : ""
-            }
+            ${clipboardBlockHtml}
             <div class="toolbar">
               <button type="button" class="btn icon" data-act="undo" title="${escapeHtml(MSG("undo"))}">↶</button>
               <button type="button" class="btn icon" data-act="redo" title="${escapeHtml(MSG("redo"))}">↷</button>
@@ -1420,14 +1701,6 @@
       });
     }
 
-    const notesEl = shadow.getElementById("pc-notes");
-    if (notesEl) {
-      notesEl.addEventListener("input", () => debouncedNotesSave(notesEl.value));
-    }
-
-    const sessSel = shadow.getElementById("pc-sess-sel");
-    if (sessSel) sessSel.addEventListener("change", onSessionSelectChange);
-
     const mainInp = shadow.getElementById("pc-calc-input");
     if (mainInp && sess) {
       mainInp.value = getCalcDraft(sess);
@@ -1453,6 +1726,12 @@
     }
 
     shadow.querySelector(".shell")?.addEventListener("click", (e) => {
+      const clipBtn = e.target.closest("[data-clip-op]");
+      if (clipBtn) {
+        const op = clipBtn.getAttribute("data-clip-op");
+        if (op) applySmartCopyOperation(op);
+        return;
+      }
       const t = e.target.closest("[data-act]");
       if (!t) return;
       const act = t.getAttribute("data-act");
@@ -1480,12 +1759,12 @@
       else if (act === "rename") renameActiveTab();
       else if (act === "exptxt") {
         const s = activeSession();
-        if (s) downloadInPage(`NoteMath-${(s.name || "h").replace(/\W+/g, "_")}.txt`, exportHistoryTxt(s));
+        if (s) downloadInPage(`notemath-${(s.name || "h").replace(/\W+/g, "_")}.txt`, exportHistoryTxt(s));
       } else if (act === "expjson") {
         const s = activeSession();
         if (s)
           downloadInPage(
-            `NoteMath-${(s.name || "h").replace(/\W+/g, "_")}.json`,
+            `notemath-${(s.name || "h").replace(/\W+/g, "_")}.json`,
             JSON.stringify({ history: s.history, total: s.total, name: s.name }, null, 2),
             "application/json"
           );
@@ -1494,13 +1773,12 @@
         if (s) exportSessionFull(s);
       } else if (act === "imp") fileInput?.click();
       else if (act === "calctoggle") toggleCalcCollapsed();
-      else if (act === "notestoggle") toggleNotesCollapsed();
       else if (act === "togglecalcvis") toggleShowCalculatorSetting();
-      else if (act === "togglenotesvis") toggleShowNotesSetting();
       else if (act === "pctplus") calcApplyPercent(1);
       else if (act === "pctminus") calcApplyPercent(-1);
       else if (act === "sq") calcSquare();
       else if (act === "sqrt") calcSqrt();
+      else if (act === "bksp") calcBackspace();
     });
 
     shadow.querySelectorAll("[data-tab]").forEach((btn) => {
@@ -1532,7 +1810,6 @@
     if (!effectiveShowPanel() || state.settings.panelMinimized) return;
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const t = ev.target;
-    if (t && t.classList && t.classList.contains("notes")) return;
 
     const key = ev.key;
     const isMain = t && t.id === "pc-calc-input";
@@ -1575,22 +1852,8 @@
       return;
     }
     if (key === "Backspace") {
-      const inp = getMainInput();
-      if (!inp) return;
       ev.preventDefault();
-      const start = inp.selectionStart ?? inp.value.length;
-      const end = inp.selectionEnd ?? inp.value.length;
-      if (start !== end) {
-        inp.value = inp.value.slice(0, start) + inp.value.slice(end);
-        inp.setSelectionRange(start, start);
-      } else if (start > 0) {
-        inp.value = inp.value.slice(0, start - 1) + inp.value.slice(start);
-        inp.setSelectionRange(start - 1, start - 1);
-      }
-      const sess = activeSession();
-      if (sess) sess.calcDraft = inp.value;
-      debouncedSave();
-      syncDisplaySubline();
+      calcBackspace();
       return;
     }
     if (key === "ArrowLeft" || key === "ArrowRight") {
@@ -1603,6 +1866,24 @@
       inp.focus();
       inp.setSelectionRange(next, next);
     }
+  }
+
+  function calcBackspace() {
+    const inp = getMainInput();
+    if (!inp) return;
+    const start = inp.selectionStart ?? inp.value.length;
+    const end = inp.selectionEnd ?? inp.value.length;
+    if (start !== end) {
+      inp.value = inp.value.slice(0, start) + inp.value.slice(end);
+      inp.setSelectionRange(start, start);
+    } else if (start > 0) {
+      inp.value = inp.value.slice(0, start - 1) + inp.value.slice(start);
+      inp.setSelectionRange(start - 1, start - 1);
+    }
+    const sess = activeSession();
+    if (sess) sess.calcDraft = inp.value;
+    debouncedSave();
+    syncDisplaySubline();
   }
 
   function onDragStart(e) {
@@ -1660,6 +1941,9 @@
     const dark =
       state.settings.theme === "dark" ||
       (state.settings.theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const panelVisible = !!(host && host.style.visibility !== "hidden" && host.style.opacity !== "0");
+    const panelRect = panelVisible && typeof host.getBoundingClientRect === "function" ? host.getBoundingClientRect() : null;
+    const toastBottom = panelRect ? Math.max(16, Math.ceil(panelRect.height + 18)) : 16;
     const bg =
       kind === "error"
         ? dark
@@ -1677,7 +1961,7 @@
         .t-wrap {
           position: fixed;
           right: 16px;
-          bottom: 16px;
+          bottom: ${toastBottom}px;
           max-width: min(320px, calc(100vw - 32px));
           pointer-events: none;
           z-index: 1;
@@ -1752,19 +2036,13 @@
     }
     if (!state) return;
 
-    if (ev.altKey && !ev.ctrlKey && !ev.metaKey && !ev.shiftKey) {
-      if (ev.code === "KeyF" && shouldHandleHotkey(ev)) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        scheduleHotkey(() => togglePanelVisible());
-        return;
-      }
-      if (ev.code === "KeyN" && shouldHandleHotkey(ev)) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        scheduleHotkey(() => newTab());
-        return;
-      }
+    if (handleSmartCopyPaste(ev)) return;
+
+    if (ev.altKey && !ev.ctrlKey && !ev.metaKey && !ev.shiftKey && ev.code === "KeyF" && shouldHandleHotkey(ev)) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      scheduleHotkey(() => togglePanelVisible());
+      return;
     }
 
     if (!shouldHandleHotkey(ev)) return;
@@ -1779,7 +2057,7 @@
       hotkeyTimer = null;
       const o = pendingHotkeyOp;
       pendingHotkeyOp = null;
-      if (o) applyOperation(o);
+      if (o) applySmartCopyOperation(o);
     }, ms);
   }
 
@@ -1796,19 +2074,18 @@
         hotkeyTimer = null;
         const o = pendingHotkeyOp;
         pendingHotkeyOp = null;
-        if (o) applyOperation(o);
+        if (o) applySmartCopyOperation(o);
       }, ms);
+      return;
     }
     if (msg.type === "TOGGLE_PANEL") {
+      if (!isTopFrame) return;
       togglePanelVisible();
       return;
     }
     if (msg.type === "OPEN_PANEL") {
+      if (!isTopFrame) return;
       openPanel();
-      return;
-    }
-    if (msg.type === "NEW_SESSION") {
-      newTab();
       return;
     }
     if (msg.type === "STATE_UPDATED") {
@@ -1840,17 +2117,20 @@
     migrateIfNeeded();
     if (!document.body) return;
 
-    host = document.createElement("div");
-    host.id = "NoteMath-host";
-    shadow = host.attachShadow({ mode: "closed" });
-    document.body.appendChild(host);
+    if (isTopFrame) {
+      host = document.createElement("div");
+      host.id = "notemath-host";
+      shadow = host.attachShadow({ mode: "closed" });
+      document.body.appendChild(host);
 
-    toastHost = document.createElement("div");
-    toastHost.id = "NoteMath-toast-host";
-    toastShadow = toastHost.attachShadow({ mode: "closed" });
-    document.body.appendChild(toastHost);
+      toastHost = document.createElement("div");
+      toastHost.id = "notemath-toast-host";
+      toastShadow = toastHost.attachShadow({ mode: "closed" });
+      document.body.appendChild(toastHost);
+    }
 
     window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("copy", captureCopiedText, true);
 
     window.addEventListener("resize", onWindowResize);
 
@@ -1873,12 +2153,12 @@
       if (!Array.isArray(se.replySnapshots)) se.replySnapshots = [];
       if (se.calcDraft == null) se.calcDraft = "";
     });
+    if (state.lastCopiedValue == null) state.lastCopiedValue = "";
     if (!state.redoStacks) state.redoStacks = {};
     state.settings = Object.assign(CalcStorageModel.defaultSettings(), state.settings || {});
   }
 
   init().catch((err) => {
     if (isContextInvalidatedError(err)) return;
-    console.warn("[NoteMath] content init failed", err);
   });
 })();

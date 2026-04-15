@@ -4,7 +4,7 @@
   "version": "1.2.2",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
-  "permissions": ["storage", "activeTab", "clipboardWrite", "tabs"],
+  "permissions": ["storage", "clipboardRead", "clipboardWrite", "tabs"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background/service-worker.js"
@@ -32,10 +32,6 @@
       "suggested_key": { "default": "Alt+F" },
       "description": "__MSG_cmdTogglePanel__"
     },
-    "new-session-tab": {
-      "suggested_key": { "default": "Alt+N" },
-      "description": "__MSG_cmdNewSession__"
-    },
     "add-to-total": {
       "suggested_key": { "default": "Alt+A" },
       "description": "__MSG_cmdAdd__"
@@ -54,13 +50,16 @@
       ],
       "js": [
         "lib/number-parse.js",
+        "lib/math-utils.js",
         "lib/parser.js",
         "lib/storage-model.js",
         "content/content.js"
       ],
       "css": ["content/content.css"],
       "run_at": "document_idle",
-      "all_frames": false
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
     }
   ]
 }

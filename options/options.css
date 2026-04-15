@@ -109,6 +109,48 @@ body {
   color: var(--muted);
 }
 
+.smartCopyGroup {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.smartCopyTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.smartCopyGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 4px 12px;
+}
+
+.smartCopyAuto {
+  display: grid;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--bd);
+}
+
+.smartCopyPaste {
+  display: grid;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--bd);
+}
+
+.smartCopyPaste select {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--bd);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
 .sessRow {
   display: flex;
   gap: 8px;

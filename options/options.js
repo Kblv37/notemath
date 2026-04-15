@@ -8,21 +8,56 @@
     return state.sessions.find((s) => s.id === state.activeSessionId) || state.sessions[0];
   }
 
-  function formatTotal(n) {
+  function formatTotal(n, decimals) {
     if (n == null || !Number.isFinite(n)) return "";
     try {
+      if (Number.isInteger(decimals) && decimals >= 0) {
+        return new Intl.NumberFormat(undefined, {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals,
+        }).format(n);
+      }
       return new Intl.NumberFormat(undefined, { maximumFractionDigits: 10 }).format(n);
     } catch {
-      return String(n);
+      return Number.isInteger(decimals) && decimals >= 0 ? n.toFixed(decimals) : String(n);
     }
   }
 
-  function exportHistoryTxt(sess) {
-    const lines = (sess.history || []).map((h) => {
-      const note = h.raw && String(h.raw) !== String(h.label) ? ` (${h.raw})` : "";
-      return `${h.label}${note}`;
+  function defaultSmartCopyPanel() {
+    return CalcStorageModel.defaultSmartCopyPanel();
+  }
+
+  function smartCopyPanelState(state) {
+    return Object.assign(defaultSmartCopyPanel(), state.settings.smartCopyPanel || {});
+  }
+
+  async function saveSmartCopyPanel(partial) {
+    const state = await loadState();
+    const current = smartCopyPanelState(state);
+    if (partial.buttons) current.buttons = Object.assign({}, current.buttons, partial.buttons);
+    if (Object.prototype.hasOwnProperty.call(partial, "enabled")) current.enabled = !!partial.enabled;
+    state.settings.smartCopyPanel = current;
+    await saveState(state);
+  }
+
+  function updateSmartCopyControls() {
+    const enabled = $("chkSmartCopyEnabled")?.checked !== false;
+    ["chkSmartCopyAdd", "chkSmartCopySubtract", "chkSmartCopyMultiply", "chkSmartCopyDivide"].forEach((id) => {
+      const el = $(id);
+      if (el) el.disabled = !enabled;
     });
-    lines.push(`= ${formatTotal(sess.total) || "0"}`);
+  }
+
+  function exportHistoryTxt(sess) {
+    const lines = [];
+    lines.push(`${MSG("session")}: ${sess.name || MSG("session")}`);
+    lines.push("");
+    (sess.history || []).forEach((h) => {
+      const note = h.raw && String(h.raw) !== String(h.label) ? ` (${h.raw})` : "";
+      lines.push(`${h.label}${note}`);
+    });
+    if ((sess.history || []).length) lines.push("");
+    lines.push(`${MSG("total")}: ${formatTotal(sess.total, sess.displayDecimals) || "0"}`);
     return lines.join("\n");
   }
 
@@ -55,12 +90,15 @@
     if (!state.redoStacks) state.redoStacks = {};
     CalcStorageModel.ensureUndoStack(state, sess.id).push({
       total: sess.total,
+      displayDecimals: sess.displayDecimals ?? null,
       initialized: sess.initialized,
       history: sess.history.map((h) => Object.assign({}, h)),
     });
     state.redoStacks[sess.id] = [];
     sess.name = String(inner.name || sess.name).slice(0, 64);
     sess.total = inner.total != null ? Number(inner.total) : null;
+    sess.displayDecimals =
+      inner.displayDecimals != null ? Math.max(0, Math.min(12, Number(inner.displayDecimals) || 0)) : null;
     sess.initialized = !!inner.initialized;
     sess.history = Array.isArray(inner.history) ? inner.history : [];
     sess.notes = typeof inner.notes === "string" ? inner.notes : "";
@@ -80,7 +118,14 @@
     $("chkToast").checked = s.showToast !== false;
     $("chkCalc").checked = s.showCalculator !== false;
     $("chkTabs").checked = s.showSessionTabs !== false;
-    $("chkNotes").checked = s.showNotes !== false;
+
+    const sc = smartCopyPanelState(state);
+    $("chkSmartCopyEnabled").checked = sc.enabled !== false;
+    $("chkSmartCopyAdd").checked = sc.buttons.add !== false;
+    $("chkSmartCopySubtract").checked = sc.buttons.subtract !== false;
+    $("chkSmartCopyMultiply").checked = sc.buttons.multiply !== false;
+    $("chkSmartCopyDivide").checked = sc.buttons.divide !== false;
+    updateSmartCopyControls();
 
     const ps = s.panelStartup || "remember";
     const pr = document.querySelector(`input[name="pstart"][value="${ps}"]`);
@@ -107,6 +152,7 @@
   }
 
   function bind() {
+    document.title = MSG("optionsTitle");
     $("pageTitle").textContent = MSG("optionsTitle");
     $("lblTheme").textContent = MSG("theme");
     $("tLight").textContent = MSG("themeLight");
@@ -122,7 +168,14 @@
     $("txtToast").textContent = MSG("enableToast");
     $("txtCalc").textContent = MSG("enableCalculator");
     $("txtTabs").textContent = MSG("enableSessionTabs");
-    $("txtNotesField").textContent = MSG("enableNotesField");
+    $("lblSmartCopy").textContent = MSG("smartCopySettingsTitle");
+    $("hintSmartCopy").textContent = MSG("smartCopySettingsHint");
+    $("txtSmartCopyEnabled").textContent = MSG("smartCopyEnabled");
+    $("lblSmartCopyButtons").textContent = MSG("smartCopyButtons");
+    $("txtSmartCopyAdd").textContent = MSG("smartCopyAdd");
+    $("txtSmartCopySubtract").textContent = MSG("smartCopySubtract");
+    $("txtSmartCopyMultiply").textContent = MSG("smartCopyMultiply");
+    $("txtSmartCopyDivide").textContent = MSG("smartCopyDivide");
     $("lblStartup").textContent = MSG("startupPanel");
     $("hintStartup").textContent = MSG("startupPanelHint");
     $("psRemember").textContent = MSG("startupRemember");
@@ -138,7 +191,7 @@
     $("btnPosBl").textContent = MSG("presetBottomLeft");
     $("lblHistory").textContent = MSG("historySettings");
     $("lblHistLimit").textContent = MSG("historyLimit");
-    $("lblSessions").textContent = MSG("session");
+    $("lblSessions").textContent = MSG("notesTitle");
     $("lblRename").textContent = MSG("renameSession");
     $("btnRename").textContent = MSG("applyRename");
     $("btnDelete").textContent = MSG("deleteSession");
@@ -179,8 +232,22 @@
     $("chkTabs").addEventListener("change", async (e) => {
       await savePartial({ showSessionTabs: e.target.checked });
     });
-    $("chkNotes").addEventListener("change", async (e) => {
-      await savePartial({ showNotes: e.target.checked });
+
+    $("chkSmartCopyEnabled").addEventListener("change", async (e) => {
+      await saveSmartCopyPanel({ enabled: e.target.checked });
+      await load();
+    });
+    $("chkSmartCopyAdd").addEventListener("change", async (e) => {
+      await saveSmartCopyPanel({ buttons: { add: e.target.checked } });
+    });
+    $("chkSmartCopySubtract").addEventListener("change", async (e) => {
+      await saveSmartCopyPanel({ buttons: { subtract: e.target.checked } });
+    });
+    $("chkSmartCopyMultiply").addEventListener("change", async (e) => {
+      await saveSmartCopyPanel({ buttons: { multiply: e.target.checked } });
+    });
+    $("chkSmartCopyDivide").addEventListener("change", async (e) => {
+      await saveSmartCopyPanel({ buttons: { divide: e.target.checked } });
     });
 
     document.querySelectorAll('input[name="pstart"]').forEach((el) => {
@@ -260,7 +327,7 @@
     $("btnTxt").addEventListener("click", async () => {
       const state = await loadState();
       const sess = activeSession(state);
-      download(`NoteMath-${(sess.name || "h").replace(/\W+/g, "_")}.txt`, exportHistoryTxt(sess));
+      download(`notemath-note-${(sess.name || "h").replace(/\W+/g, "_")}.txt`, exportHistoryTxt(sess));
     });
 
     $("btnJson").addEventListener("click", async () => {
@@ -269,12 +336,13 @@
       const payload = {
         name: sess.name,
         total: sess.total,
+        displayDecimals: sess.displayDecimals ?? null,
         initialized: sess.initialized,
         history: sess.history,
         exportedAt: new Date().toISOString(),
       };
       download(
-        `NoteMath-${(sess.name || "h").replace(/\W+/g, "_")}.json`,
+        `notemath-note-${(sess.name || "h").replace(/\W+/g, "_")}.json`,
         JSON.stringify(payload, null, 2),
         "application/json"
       );
@@ -284,12 +352,13 @@
       const state = await loadState();
       const sess = activeSession(state);
       const payload = {
-        type: "NoteMath-session",
+        type: "notemath-session",
         version: 1,
         exportedAt: new Date().toISOString(),
         session: {
           name: sess.name,
           total: sess.total,
+          displayDecimals: sess.displayDecimals ?? null,
           initialized: sess.initialized,
           history: sess.history,
           notes: sess.notes || "",
@@ -297,7 +366,7 @@
         },
       };
       download(
-        `NoteMath-session-${(sess.name || "s").replace(/\W+/g, "_")}.json`,
+        `notemath-note-full-${(sess.name || "s").replace(/\W+/g, "_")}.json`,
         JSON.stringify(payload, null, 2),
         "application/json"
       );
@@ -318,7 +387,7 @@
     $("btnExportSettings").addEventListener("click", async () => {
       const state = await loadState();
       const body = serializeSettings(state);
-      download("NoteMath-settings.txt", body, "text/plain;charset=utf-8");
+      download("notemath-settings.txt", body, "text/plain;charset=utf-8");
     });
 
     $("btnImportSettings").addEventListener("click", () => $("fileSettings").click());

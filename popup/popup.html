@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -8,20 +8,25 @@
   </head>
   <body>
     <header class="hdr">
-      <div style="display:flex; align-items:center; gap:8px;">
-        <img src="../assets/logo180x180.png" width="18" height="18" />
-        <h1 class="title" id="extTitle"></h1>
-      </div>
+      <img src="../assets/logo180x180.png" width="18" height="18" />
+      <h1 class="title" id="extTitle"></h1>
       <button type="button" class="linkish" id="btnOptions"></button>
     </header>
 
     <button type="button" class="btn primary open-calc" id="btnOpenCalc"></button>
 
-    <section class="row">
-      <label class="lbl" for="selSession" id="lblSession"></label>
-      <div class="sess">
-        <select id="selSession"></select>
-        <button type="button" class="btn" id="btnNew"></button>
+    <section class="notesNav">
+      <div class="notesNavHead">
+        <label class="lbl" id="lblNotesList"></label>
+        <button type="button" class="btn icon" id="btnNew"></button>
+      </div>
+      <div class="noteTabs" id="noteTabs" role="tablist" aria-label="Заметки"></div>
+      <div class="noteEdit">
+        <input type="text" id="inpNoteName" class="inp" maxlength="64" />
+        <div class="noteEditActions">
+          <button type="button" class="btn" id="btnRename"></button>
+          <button type="button" class="btn danger" id="btnDelete"></button>
+        </div>
       </div>
     </section>
 
@@ -42,6 +47,15 @@
 
     <section class="hist" id="hist"></section>
 
+    <section class="notesBox">
+      <div class="notesHead">
+        <label class="lbl" for="txtNotes" id="lblNotes"></label>
+        <span class="noteState" id="noteState"></span>
+      </div>
+      <textarea id="txtNotes" class="notes" spellcheck="false"></textarea>
+      <div class="noteHint" id="noteHint"></div>
+    </section>
+
     <section class="actions">
       <button type="button" class="btn primary" id="btnCopy"></button>
       <button type="button" class="btn" id="btnUndo"></button>
@@ -59,7 +73,12 @@
       <span id="lblPanel"></span>
     </label>
 
+    <div class="footerActions">
+      <button type="button" class="btn" id="btnResetPos"></button>
+    </div>
+
     <script src="../lib/number-parse.js"></script>
+    <script src="../lib/math-utils.js"></script>
     <script src="../lib/parser.js"></script>
     <script src="../lib/storage-model.js"></script>
     <script src="popup.js"></script>
