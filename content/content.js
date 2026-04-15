@@ -323,13 +323,31 @@
   }
 
   function clipboardRawValue() {
-    return String(state?.lastCopiedValue ?? "").trim();
+    return String(state?.lastCopiedValue ?? "");
   }
 
-  function parseClipboardValue(sess) {
-    const raw = clipboardRawValue();
-    if (!raw) return null;
+  function parseClipboardValue(sess, rawValue) {
+    const raw = String(rawValue ?? clipboardRawValue());
+    if (!raw.trim()) return null;
     return parseSmartCopyValue(raw, sess?.total);
+  }
+
+  function clipboardStatus(sess, rawValue) {
+    const raw = String(rawValue ?? clipboardRawValue());
+    if (!raw.trim()) return "empty";
+    return parseClipboardValue(sess, raw) ? "valid" : "invalid";
+  }
+
+  function updateClipboardInputVisual(rawValue, pulse) {
+    const inp = shadow && shadow.getElementById("pc-clip-input");
+    if (!inp) return;
+    const status = clipboardStatus(activeSession(), rawValue);
+    inp.classList.remove("state-empty", "state-valid", "state-invalid", "pulse");
+    inp.classList.add(`state-${status}`);
+    if (pulse) {
+      void inp.offsetWidth;
+      inp.classList.add("pulse");
+    }
   }
 
   async function readClipboardTextSafe() {
@@ -394,7 +412,7 @@
 
   function handleSmartCopyPaste(ev) {
     if (!shouldInterceptSmartCopyPaste(ev)) return false;
-    if (isEditableFocused() && !isFocusInsidePanel()) return false;
+    if (isEditableFocused()) return false;
     ev.preventDefault();
     ev.stopPropagation();
 
@@ -1141,15 +1159,8 @@
     const clipboardEnabled = smartCopyEnabledOnPage();
     const clipboardButtons = smartCopyButtons();
     const clipboardRaw = clipboardRawValue();
-    const clipboardParsed = parseClipboardValue(sess);
-    const clipboardState = !clipboardRaw ? "empty" : clipboardParsed ? "valid" : "invalid";
+    const clipboardState = clipboardStatus(sess, clipboardRaw);
     const clipboardPulse = Date.now() < clipboardFlashUntil ? " pulse" : "";
-    const clipboardText =
-      clipboardState === "empty"
-        ? MSG("clipboardEmpty")
-        : clipboardState === "invalid"
-          ? MSG("clipboardInvalid")
-          : clipboardRaw;
 
     const tabsHtml = state.sessions
       .map((s) => {
@@ -1163,14 +1174,9 @@
     const icoMin = `<svg class="ico" width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 8.2h10v1H3v-1z"/></svg>`;
     const icoRestore = `<svg class="ico" width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3.5 5h9v7h-9V5zm1 1v5h7V6h-7z"/></svg>`;
     const icoClose = `<svg class="ico" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>`;
+    const icoRefresh = `<svg class="ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M12.5 5.2A4.9 4.9 0 1 0 13 8h-1.5"/><path d="M12.5 2.8v2.9h-2.9"/></svg>`;
     const chevDown = `<svg class="ico ico-chev" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 5.5l4 4 4-4H4z"/></svg>`;
     const chevEnd = `<svg class="ico ico-chev" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.5 4l4 4-4 4V4z"/></svg>`;
-    const clipboardOpsHtml = clipboardButtons
-      .map(
-        (btn) =>
-          `<button type="button" class="btn sm clip-op" data-clip-op="${btn.op}" title="${escapeHtml(btn.title)}">${escapeHtml(btn.label)}</button>`
-      )
-      .join("");
     const clipboardMiniOpsHtml = clipboardButtons
       .map(
         (btn) =>
@@ -1181,8 +1187,20 @@
       clipboardEnabled && clipboardButtons.length
         ? `<div class="clip-block">
             <div class="clip-lbl">${escapeHtml(MSG("clipboardLastCopied"))}</div>
-            <div class="clip-value ${clipboardState}${clipboardPulse}" title="${escapeHtml(clipboardRaw || "")}">${escapeHtml(clipboardText)}</div>
-            <div class="clip-ops">${clipboardOpsHtml}</div>
+            <div class="clip-row">
+              <input
+                type="text"
+                id="pc-clip-input"
+                class="clip-input state-${clipboardState}${clipboardPulse}"
+                value="${escapeHtml(clipboardRaw)}"
+                placeholder="${escapeHtml(MSG("clipboardPlaceholder"))}"
+                spellcheck="false"
+                autocomplete="off"
+              />
+              <button type="button" class="iconbtn sm clip-refresh" data-act="cliprefresh" title="${escapeHtml(
+                MSG("clipboardRefresh")
+              )}">${icoRefresh}</button>
+            </div>
           </div>`
         : "";
 
@@ -1405,43 +1423,49 @@
           color: ${st.muted};
           margin-bottom: 4px;
         }
-        .clip-value {
+        .clip-row {
+          display: flex;
+          gap: 6px;
+          align-items: center;
+        }
+        .clip-input {
+          width: 100%;
+          min-width: 0;
           border-radius: 8px;
           padding: 7px 9px;
-          margin-bottom: 8px;
           font: 600 12px/1.3 ui-monospace, "SF Mono", Consolas, monospace;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
           border: 1px solid transparent;
-          transition: background .18s ease, border-color .18s ease, box-shadow .18s ease;
+          color: inherit;
+          background: ${st.dark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.05)"};
+          transition: background .18s ease, border-color .18s ease, box-shadow .18s ease, color .18s ease;
         }
-        .clip-value.empty {
+        .clip-input::placeholder { color: ${st.muted}; font-weight: 500; }
+        .clip-input:focus {
+          outline: none;
+          border-color: ${st.accent};
+          box-shadow: 0 0 0 3px ${st.dark ? "rgba(100,181,246,.22)" : "rgba(0,120,212,.18)"};
+        }
+        .clip-input.state-empty {
           background: ${st.dark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.05)"};
           color: ${st.muted};
         }
-        .clip-value.valid {
+        .clip-input.state-valid {
           background: ${st.dark ? "rgba(60,160,90,.22)" : "rgba(46,125,50,.12)"};
           border-color: ${st.dark ? "rgba(80,190,120,.38)" : "rgba(46,125,50,.28)"};
           color: ${st.dark ? "#c8f5d7" : "#1b5e20"};
         }
-        .clip-value.invalid {
+        .clip-input.state-invalid {
           background: ${st.dark ? "rgba(210,90,90,.2)" : "rgba(198,40,40,.11)"};
           border-color: ${st.dark ? "rgba(230,120,120,.38)" : "rgba(198,40,40,.28)"};
           color: ${st.dark ? "#ffd4d4" : "#8e1c1c"};
         }
-        .clip-value.pulse {
+        .clip-input.pulse {
           animation: clipPulse .32s ease;
         }
-        .clip-ops {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 6px;
-        }
-        .clip-op {
-          min-width: 34px;
-          font-weight: 700;
-          padding: 5px 10px;
+        .clip-refresh {
+          flex-shrink: 0;
+          width: 30px;
+          height: 30px;
         }
         .clip-op-mini {
           min-width: 30px;
@@ -1649,6 +1673,7 @@
             <div class="toolbar">
               <button type="button" class="btn icon" data-act="undo" title="${escapeHtml(MSG("undo"))}">↶</button>
               <button type="button" class="btn icon" data-act="redo" title="${escapeHtml(MSG("redo"))}">↷</button>
+              ${clipboardEnabled && clipboardButtons.length ? clipboardMiniOpsHtml : ""}
               <button type="button" class="btn" data-act="copy">${escapeHtml(MSG("copy"))}</button>
               <button type="button" class="btn" data-act="reset">${escapeHtml(MSG("reset"))}</button>
               <button type="button" class="btn" data-act="clearhist">${escapeHtml(MSG("clearHistory"))}</button>
@@ -1720,6 +1745,27 @@
       syncDisplaySubline();
     }
 
+    const clipInp = shadow.getElementById("pc-clip-input");
+    if (clipInp && state) {
+      clipInp.value = clipboardRawValue();
+      clipInp.addEventListener("input", () => {
+        state.lastCopiedValue = clipInp.value;
+        debouncedSave();
+        updateClipboardInputVisual(clipInp.value, false);
+      });
+      clipInp.addEventListener("blur", () => {
+        state.lastCopiedValue = clipInp.value;
+        debouncedSave();
+        updateClipboardInputVisual(clipInp.value, false);
+      });
+      clipInp.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        applySmartCopyOperation(clipboardButtons[0]?.op || "add");
+      });
+      updateClipboardInputVisual(clipInp.value, Date.now() < clipboardFlashUntil);
+    }
+
     if (!panelKeydownBound) {
       panelKeydownBound = true;
       shadow.addEventListener("keydown", onPanelKeyDown, true);
@@ -1779,6 +1825,11 @@
       else if (act === "sq") calcSquare();
       else if (act === "sqrt") calcSqrt();
       else if (act === "bksp") calcBackspace();
+      else if (act === "cliprefresh") {
+        void refreshClipboardFromSystem().catch(() => {
+          showToast(MSG("smartCopyNoValue"), "error");
+        });
+      }
     });
 
     shadow.querySelectorAll("[data-tab]").forEach((btn) => {
