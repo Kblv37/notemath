@@ -129,5 +129,20 @@
   "clipboardLastCopied": { "message": "Последняя копия" },
   "clipboardEmpty": { "message": "Буфер пуст" },
   "clipboardInvalid": { "message": "Не число" },
-  "backspaceOne": { "message": "⌫" }
+  "backspaceOne": { "message": "⌫" },
+  "clipboardPlaceholder": { "message": "Вставьте или скопируйте число" },
+  "clipboardRefresh": { "message": "Прочитать из буфера обмена" },
+  "clearAll": { "message": "Очистить всё" },
+  "uiScale": { "message": "Масштаб UI" },
+  "uiScaleLabel": { "message": "Масштаб панели (80%–130%)" },
+  "secInterface": { "message": "Интерфейс" },
+  "secClipboard": { "message": "Буфер обмена" },
+  "secHotkeys": { "message": "Горячие клавиши" },
+  "secBehavior": { "message": "Поведение" },
+  "secSessions": { "message": "Заметки" },
+  "secExport": { "message": "Экспорт и импорт" },
+  "secDanger": { "message": "Опасная зона" },
+  "descTheme": { "message": "Выберите цветовую схему для интерфейса расширения." },
+  "descDanger": { "message": "Это безвозвратно удалит все заметки, историю и настройки." },
+  "optionsSubtitle": { "message": "Управление настройками NoteMath" }
 }

@@ -106,15 +106,26 @@
   function exportHistoryTxt(sess) {
     const lines = [];
     lines.push(`${MSG("session")}: ${sess.name || MSG("session")}`);
+    lines.push("=".repeat(40));
     lines.push("");
-    (sess.history || []).forEach((h) => {
-      const note = h.raw && String(h.raw) !== String(h.label) ? ` (${h.raw})` : "";
-      lines.push(`${h.label}${note}`);
-    });
-    if ((sess.history || []).length) {
-      lines.push("");
+    const history = sess.history || [];
+    if (history.length === 0) {
+      lines.push(MSG("historyEmpty"));
+    } else {
+      history.forEach((h) => {
+        const note = h.raw && String(h.raw) !== String(h.label) ? ` (${h.raw})` : "";
+        lines.push(`${h.label}${note}`);
+      });
     }
+    lines.push("");
     lines.push(`${MSG("total")}: ${formatTotal(sess.total, sess.displayDecimals) || "0"}`);
+    if (sess.notes && sess.notes.trim()) {
+      lines.push("");
+      lines.push(`${MSG("notesTitle")}:`);
+      lines.push(sess.notes.trim());
+    }
+    lines.push("");
+    lines.push(`NoteMath — ${new Date().toLocaleString()}`);
     return lines.join("\n");
   }
 
@@ -475,13 +486,18 @@
     });
 
     $("btnTxt").addEventListener("click", async () => {
-      const sess = window.__pcNote || window.__pcSession;
+      await flushNotes().catch(() => {});
+      const state = await loadState();
+      const sess = activeNote(state);
       if (!sess) return;
-      download(`notemath-note-${sess.name.replace(/\W+/g, "_")}.txt`, exportHistoryTxt(sess));
+      const filename = `notemath-${(sess.name || "note").replace(/\W+/g, "_")}.txt`;
+      download(filename, exportHistoryTxt(sess));
     });
 
     $("btnJson").addEventListener("click", async () => {
-      const sess = window.__pcNote || window.__pcSession;
+      await flushNotes().catch(() => {});
+      const state = await loadState();
+      const sess = activeNote(state);
       if (!sess) return;
       const payload = {
         name: sess.name,
@@ -493,7 +509,7 @@
         exportedAt: new Date().toISOString(),
       };
       download(
-        `notemath-note-${sess.name.replace(/\W+/g, "_")}.json`,
+        `notemath-${(sess.name || "note").replace(/\W+/g, "_")}.json`,
         JSON.stringify(payload, null, 2),
         "application/json"
       );

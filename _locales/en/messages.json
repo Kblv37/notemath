@@ -129,5 +129,20 @@
   "clipboardLastCopied": { "message": "Последняя копия" },
   "clipboardEmpty": { "message": "Буфер пуст" },
   "clipboardInvalid": { "message": "Не число" },
-  "backspaceOne": { "message": "⌫" }
+  "backspaceOne": { "message": "⌫" },
+  "clipboardPlaceholder": { "message": "Paste or type a number" },
+  "clipboardRefresh": { "message": "Read from clipboard" },
+  "clearAll": { "message": "Clear all" },
+  "uiScale": { "message": "UI Scale" },
+  "uiScaleLabel": { "message": "Panel scale (80%–130%)" },
+  "secInterface": { "message": "Interface" },
+  "secClipboard": { "message": "Clipboard" },
+  "secHotkeys": { "message": "Hotkeys" },
+  "secBehavior": { "message": "Behaviour" },
+  "secSessions": { "message": "Notes" },
+  "secExport": { "message": "Export & Import" },
+  "secDanger": { "message": "Danger zone" },
+  "descTheme": { "message": "Choose a colour scheme for the extension UI." },
+  "descDanger": { "message": "This will permanently delete all notes, history and settings." },
+  "optionsSubtitle": { "message": "Manage your NoteMath preferences" }
 }

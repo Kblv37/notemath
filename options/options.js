@@ -141,6 +141,10 @@
     $("inpHistLimit").value = String(s.historyLimit ?? 200);
     $("inpDebounce").value = String(s.hotkeyDebounceMs ?? 140);
 
+    const scale = Math.max(0.8, Math.min(1.3, Number(s.uiScale) || 1.0));
+    $("inpUiScale").value = String(scale);
+    $("uiScaleVal").textContent = Math.round(scale * 100) + "%";
+
     const sess = activeSession(state);
     $("inpName").value = sess.name || "";
   }
@@ -154,10 +158,25 @@
   function bind() {
     document.title = MSG("optionsTitle");
     $("pageTitle").textContent = MSG("optionsTitle");
+    // Page subtitle
+    const sub = $("pageSubtitle");
+    if (sub) sub.textContent = MSG("optionsSubtitle") || "NoteMath";
+    // Section group titles
+    const setIfExists = (id, key) => { const el = $(id); if (el) el.textContent = MSG(key); };
+    setIfExists("secInterface",  "secInterface");
+    setIfExists("secClipboard",  "secClipboard");
+    setIfExists("secHotkeys",    "secHotkeys");
+    setIfExists("secBehavior",   "secBehavior");
+    setIfExists("secSessions",   "secSessions");
+    setIfExists("secExport",     "secExport");
+    setIfExists("secDanger",     "secDanger");
+    setIfExists("descTheme",     "descTheme");
+    setIfExists("descDanger",    "descDanger");
     $("lblTheme").textContent = MSG("theme");
     $("tLight").textContent = MSG("themeLight");
     $("tDark").textContent = MSG("themeDark");
     $("tSystem").textContent = MSG("themeSystem");
+    $("lblUiScale").textContent = MSG("uiScaleLabel");
     $("lblHotkeys").textContent = MSG("hotkeysTitle");
     $("hintShortcuts").textContent = MSG("shortcutsHint");
     $("lblDebounce").textContent = MSG("hotkeyDebounce");
@@ -212,6 +231,16 @@
         const v = document.querySelector('input[name="theme"]:checked')?.value;
         if (v) await savePartial({ theme: v });
       });
+    });
+
+    $("inpUiScale").addEventListener("input", () => {
+      const v = Math.max(0.8, Math.min(1.3, Number($("inpUiScale").value) || 1.0));
+      $("uiScaleVal").textContent = Math.round(v * 100) + "%";
+    });
+    $("inpUiScale").addEventListener("change", async () => {
+      const v = Math.max(0.8, Math.min(1.3, Number($("inpUiScale").value) || 1.0));
+      $("uiScaleVal").textContent = Math.round(v * 100) + "%";
+      await savePartial({ uiScale: v });
     });
 
     $("chkFallback").addEventListener("change", async (e) => {

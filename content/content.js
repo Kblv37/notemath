@@ -440,10 +440,21 @@
     return true;
   }
 
+  /**
+   * Used by UI buttons (clip-block ops, Enter in clip-input).
+   * Reads operand from the clip-input DOM field, falls back to state.lastCopiedValue.
+   */
   function applySmartCopyOperation(op) {
     if (!smartCopyEnabledOnPage()) return;
     const sess = activeSession();
-    const parsed = parseClipboardValue(sess);
+    // Prefer the value currently shown in the clip-input over raw state
+    const clipInp = shadow && shadow.getElementById("pc-clip-input");
+    const rawFromInput = clipInp ? clipInp.value : null;
+    const raw = rawFromInput != null ? rawFromInput : clipboardRawValue();
+    if (raw !== null && raw !== undefined && raw !== clipboardRawValue()) {
+      state.lastCopiedValue = raw;
+    }
+    const parsed = parseClipboardValue(sess, raw);
     if (!parsed || !Number.isFinite(parsed.value)) {
       showToast(MSG("smartCopyNoValue"), "error");
       return;
@@ -452,6 +463,34 @@
       value: parsed.value,
       precision: parsed.precision,
     });
+  }
+
+  /**
+   * Used by keyboard hotkeys (Alt+A / Alt+S) and the chrome.commands API.
+   * Reads operand ONLY from the current page text selection — never from clipboard.
+   */
+  function applySelectionOperation(op) {
+    const raw = getSelectionText();
+    if (!raw) {
+      showToast(MSG("errNoSelection"), "error");
+      return;
+    }
+    applyOperation(normalizeSmartCopyOp(op), raw, null);
+  }
+
+  async function refreshClipboardFromSystem() {
+    const seq = ++smartCopyCopySeq;
+    let text = "";
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      throw new Error("clipboard_read_failed");
+    }
+    if (seq !== smartCopyCopySeq || disposed || !state) return;
+    state.lastCopiedValue = String(text || "").trim();
+    clipboardFlashUntil = Date.now() + 700;
+    debouncedSave();
+    renderPanel();
   }
 
   function previewNumericValue(sess, raw) {
@@ -677,6 +716,21 @@
     debouncedSave();
     renderPanel();
     showToast(MSG("sessionReset"), "ok");
+  }
+
+  function clearAll() {
+    const sess = activeSession();
+    if (!sess) return;
+    clearRedoStack(state, sess.id);
+    pushUndo(sess);
+    sess.total = null;
+    sess.displayDecimals = null;
+    sess.initialized = false;
+    sess.history = [];
+    sess.calcDraft = "";
+    debouncedSave();
+    renderPanel();
+    showToast(MSG("clearAll"), "ok");
   }
 
   function clearHistoryOnly() {
@@ -1157,6 +1211,7 @@
     const showTabs = state.settings.showSessionTabs !== false;
     const totalPrecision = sessionDisplayDecimals(sess);
     const clipboardEnabled = smartCopyEnabledOnPage();
+    const uiScale = Math.max(0.8, Math.min(1.3, Number(state.settings.uiScale) || 1.0));
     const clipboardButtons = smartCopyButtons();
     const clipboardRaw = clipboardRawValue();
     const clipboardState = clipboardStatus(sess, clipboardRaw);
@@ -1620,7 +1675,7 @@
         }
         input[type="file"] { display: none; }
       </style>
-      <div class="shell" part="shell">
+      <div class="shell" part="shell" style="${uiScale !== 1.0 ? `transform: scale(${uiScale}); transform-origin: bottom right;` : ""}">
         ${
           showTabs
             ? `<div class="tabs">
@@ -1656,6 +1711,7 @@
                 <button type="button" class="btn icon" data-act="undo" title="${escapeHtml(MSG("undo"))}">↶</button>
                 <button type="button" class="btn icon" data-act="redo" title="${escapeHtml(MSG("redo"))}">↷</button>
                 ${clipboardEnabled && clipboardButtons.length ? clipboardMiniOpsHtml : ""}
+                <button type="button" class="btn icon" data-act="clearall" title="${escapeHtml(MSG("clearAll"))}">AC</button>
               </div>
             </div>`
               : `<div class="body">
@@ -1676,6 +1732,7 @@
               ${clipboardEnabled && clipboardButtons.length ? clipboardMiniOpsHtml : ""}
               <button type="button" class="btn" data-act="copy">${escapeHtml(MSG("copy"))}</button>
               <button type="button" class="btn" data-act="reset">${escapeHtml(MSG("reset"))}</button>
+              <button type="button" class="btn" data-act="clearall">${escapeHtml(MSG("clearAll"))}</button>
               <button type="button" class="btn" data-act="clearhist">${escapeHtml(MSG("clearHistory"))}</button>
               <div class="more-wrap">
                 <button type="button" class="btn" data-act="more" id="pc-more-btn">${escapeHtml(MSG("more"))} ▾</button>
@@ -1790,6 +1847,7 @@
       if (act === "undo") undoLast();
       else if (act === "redo") redoLast();
       else if (act === "reset") resetSession();
+      else if (act === "clearall") clearAll();
       else if (act === "copy")
         void copyResult().catch((err) => {
           if (isContextInvalidatedError(err) || !isExtensionContextValid()) disposeContentUi();
@@ -2011,29 +2069,30 @@
       <style>
         .t-wrap {
           position: fixed;
-          right: 16px;
+          right: 20px;
           bottom: ${toastBottom}px;
-          max-width: min(320px, calc(100vw - 32px));
+          max-width: min(300px, calc(100vw - 40px));
           pointer-events: none;
           z-index: 1;
         }
         .t {
-          padding: 10px 14px;
-          border-radius: 12px;
+          padding: 9px 14px;
+          border-radius: 10px;
           color: #fff;
           font: 13px/1.4 system-ui, sans-serif;
-          box-shadow: 0 8px 28px rgba(0,0,0,.28);
-          animation: tEnter .28s ease-out forwards;
+          box-shadow: 0 4px 20px rgba(0,0,0,.22), 0 1px 4px rgba(0,0,0,.12);
+          animation: tEnter .2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+          will-change: opacity, transform;
         }
         @keyframes tEnter {
-          from { opacity: 0; transform: translateX(12px) translateY(8px); }
-          to { opacity: 1; transform: translateX(0) translateY(0); }
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
         @keyframes tLeave {
           from { opacity: 1; transform: translateY(0); }
           to { opacity: 0; transform: translateY(6px); }
         }
-        .t.leave { animation: tLeave .22s ease-in forwards; }
+        .t.leave { animation: tLeave .2s ease-in forwards; }
       </style>
       <div class="t-wrap"><div class="t" id="pc-toast-el" style="background:${bg}">${escapeHtml(text)}</div></div>
     `;
@@ -2108,7 +2167,7 @@
       hotkeyTimer = null;
       const o = pendingHotkeyOp;
       pendingHotkeyOp = null;
-      if (o) applySmartCopyOperation(o);
+      if (o) applySelectionOperation(o);
     }, ms);
   }
 
@@ -2125,7 +2184,7 @@
         hotkeyTimer = null;
         const o = pendingHotkeyOp;
         pendingHotkeyOp = null;
-        if (o) applySmartCopyOperation(o);
+        if (o) applySelectionOperation(o);
       }, ms);
       return;
     }
