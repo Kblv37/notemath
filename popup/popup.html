@@ -7,19 +7,15 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <!-- Header -->
     <header class="hdr">
-      <img src="../assets/logo180x180.png" width="18" height="18" alt="NoteMath" />
       <h1 class="title" id="extTitle"></h1>
       <button type="button" class="linkish" id="btnOptions"></button>
     </header>
 
     <div class="popup-body">
 
-      <!-- Open calculator -->
       <button type="button" class="btn primary open-calc" id="btnOpenCalc"></button>
 
-      <!-- Notes tabs -->
       <section class="notesNav">
         <div class="notesNavHead">
           <span class="lbl" id="lblNotesList"></span>
@@ -35,7 +31,6 @@
         </div>
       </section>
 
-      <!-- Expression -->
       <section class="expr">
         <label class="lbl" for="inpExpr" id="lblExpr"></label>
         <input type="text" id="inpExpr" class="inp" autocomplete="off" spellcheck="false" />
@@ -46,16 +41,13 @@
         <div class="calcOut" id="elCalcOut"></div>
       </section>
 
-      <!-- Total -->
       <section class="totalBox">
         <span class="lbl" id="lblTotal"></span>
         <div class="big" id="elTotal">—</div>
       </section>
 
-      <!-- History -->
       <section class="hist" id="hist"></section>
 
-      <!-- Notes textarea -->
       <section class="notesBox">
         <div class="notesHead">
           <label class="lbl" for="txtNotes" id="lblNotes"></label>
@@ -65,7 +57,6 @@
         <div class="noteHint" id="noteHint"></div>
       </section>
 
-      <!-- Actions -->
       <div class="actions">
         <button type="button" class="btn primary" id="btnCopy"></button>
         <button type="button" class="btn" id="btnUndo"></button>
@@ -73,7 +64,6 @@
         <button type="button" class="btn" id="btnReset"></button>
       </div>
 
-      <!-- Export -->
       <div class="export-group">
         <button type="button" class="btn" id="btnTxt"></button>
         <button type="button" class="btn" id="btnJson"></button>
@@ -81,7 +71,6 @@
 
     </div>
 
-    <!-- Footer -->
     <footer class="popup-footer">
       <label class="chk">
         <input type="checkbox" id="chkPanel" />

@@ -10,17 +10,17 @@
     "service_worker": "background/service-worker.js"
   },
   "icons": {
-    "16": "assets/logo180x180.png",
-    "32": "assets/logo180x180.png",
-    "48": "assets/logo180x180.png",
-    "128": "assets/logo180x180.png"
+    "16": "assets/logoPopup180x180.png",
+    "32": "assets/logoPopup180x180.png",
+    "48": "assets/logoPopup180x180.png",
+    "128": "assets/logoPopup180x180.png"
   },
   "action": {
     "default_title": "__MSG_actionTitle__",
     "default_popup": "popup/popup.html",
     "default_icon": {
-      "16": "assets/logo180x180.png",
-      "32": "assets/logo180x180.png"
+      "16": "assets/logoPopup180x180.png",
+      "32": "assets/logoPopup180x180.png"
     }
   },
   "options_ui": {

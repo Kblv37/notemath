@@ -440,14 +440,9 @@
     return true;
   }
 
-  /**
-   * Used by UI buttons (clip-block ops, Enter in clip-input).
-   * Reads operand from the clip-input DOM field, falls back to state.lastCopiedValue.
-   */
   function applySmartCopyOperation(op) {
     if (!smartCopyEnabledOnPage()) return;
     const sess = activeSession();
-    // Prefer the value currently shown in the clip-input over raw state
     const clipInp = shadow && shadow.getElementById("pc-clip-input");
     const rawFromInput = clipInp ? clipInp.value : null;
     const raw = rawFromInput != null ? rawFromInput : clipboardRawValue();
@@ -465,10 +460,6 @@
     });
   }
 
-  /**
-   * Used by keyboard hotkeys (Alt+A / Alt+S) and the chrome.commands API.
-   * Reads operand ONLY from the current page text selection — never from clipboard.
-   */
   function applySelectionOperation(op) {
     const raw = getSelectionText();
     if (!raw) {
@@ -1142,13 +1133,24 @@
     const menu = shadow.getElementById("pc-more-menu");
     const btn = shadow.getElementById("pc-more-btn");
     if (!menu || !btn || !menu.classList.contains("open")) return;
-    menu.classList.remove("menu-up");
+
+    menu.classList.remove("menu-up", "menu-left");
+
     const gap = 6;
     const br = btn.getBoundingClientRect();
     const mh = menu.scrollHeight || menu.offsetHeight || 200;
+    const mw = menu.scrollWidth || menu.offsetWidth || 200;
+
     const spaceBelow = window.innerHeight - br.bottom - gap;
     const spaceAbove = br.top - gap;
-    if (spaceBelow < mh && spaceAbove > spaceBelow) menu.classList.add("menu-up");
+    if (spaceBelow < mh && spaceAbove > spaceBelow) {
+      menu.classList.add("menu-up");
+    }
+
+    const menuRight = br.right;
+    if (menuRight - mw < 0) {
+      menu.classList.add("menu-left");
+    }
   }
 
   function toggleMoreMenu() {
@@ -1538,6 +1540,18 @@
           align-items: center;
           margin-bottom: 10px;
         }
+        .toolbar-left {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          align-items: center;
+          flex: 1;
+          min-width: 0;
+        }
+        .toolbar-right {
+          flex-shrink: 0;
+          margin-left: auto;
+        }
         .btn {
           border: none; border-radius: 8px; padding: 7px 11px;
           font-size: 12px; cursor: pointer;
@@ -1569,6 +1583,10 @@
         .more-menu.menu-up {
           top: auto;
           bottom: calc(100% + 6px);
+        }
+        .more-menu.menu-left {
+          right: auto;
+          left: 0;
         }
         .more-menu.open { display: block; animation: menuIn .18s ease-out; }
         .more-menu.open.menu-up { animation: menuInUp .18s ease-out; }
@@ -1691,7 +1709,6 @@
           <div class="panel-top" id="pc-drag">
             <span class="panel-brand">${escapeHtml(MSG("widgetTitle"))}</span>
             <div class="panel-actions">
-              <button type="button" class="iconbtn sm${showCalc && !calcCollapsed ? " on" : ""}" data-act="togglecalcvis" title="${escapeHtml(MSG("toggleCalcKeys"))}">${icoCalc}</button>
               <button type="button" class="iconbtn sm${pinOn ? " on" : ""}" data-act="pin" title="${escapeHtml(MSG("pin"))}">${icoPin}</button>
               <button type="button" class="iconbtn sm" data-act="min" title="${escapeHtml(minOn ? MSG("expand") : MSG("minimize"))}">${minOn ? icoRestore : icoMin}</button>
               <button type="button" class="iconbtn sm" data-act="close" title="${escapeHtml(MSG("closePanel"))}">${icoClose}</button>
@@ -1727,23 +1744,27 @@
             </div>
             ${clipboardBlockHtml}
             <div class="toolbar">
-              <button type="button" class="btn icon" data-act="undo" title="${escapeHtml(MSG("undo"))}">↶</button>
-              <button type="button" class="btn icon" data-act="redo" title="${escapeHtml(MSG("redo"))}">↷</button>
-              ${clipboardEnabled && clipboardButtons.length ? clipboardMiniOpsHtml : ""}
-              <button type="button" class="btn" data-act="copy">${escapeHtml(MSG("copy"))}</button>
-              <button type="button" class="btn" data-act="reset">${escapeHtml(MSG("reset"))}</button>
-              <button type="button" class="btn" data-act="clearall">${escapeHtml(MSG("clearAll"))}</button>
-              <button type="button" class="btn" data-act="clearhist">${escapeHtml(MSG("clearHistory"))}</button>
-              <div class="more-wrap">
-                <button type="button" class="btn" data-act="more" id="pc-more-btn">${escapeHtml(MSG("more"))} ▾</button>
-                <div class="more-menu" id="pc-more-menu">
-                  <button type="button" data-act="rename">${escapeHtml(MSG("renameTab"))}</button>
-                  <button type="button" data-act="site">${escapeHtml(isSiteDisabled() ? MSG("toggleOnPageOff") : MSG("toggleOnPage"))}</button>
-                  <button type="button" data-act="reply">${escapeHtml(MSG("reply"))}</button>
-                  <button type="button" data-act="exptxt">${escapeHtml(MSG("exportTxt"))}</button>
-                  <button type="button" data-act="expjson">${escapeHtml(MSG("exportJson"))}</button>
-                  <button type="button" data-act="expsess">${escapeHtml(MSG("exportSession"))}</button>
-                  <button type="button" data-act="imp">${escapeHtml(MSG("importSession"))}</button>
+              <div class="toolbar-left">
+                <button type="button" class="btn icon" data-act="undo" title="${escapeHtml(MSG("undo"))}">↶</button>
+                <button type="button" class="btn icon" data-act="redo" title="${escapeHtml(MSG("redo"))}">↷</button>
+                ${clipboardEnabled && clipboardButtons.length ? clipboardMiniOpsHtml : ""}
+                <button type="button" class="btn" data-act="copy">${escapeHtml(MSG("copy"))}</button>
+                <button type="button" class="btn" data-act="reset">${escapeHtml(MSG("reset"))}</button>
+                <button type="button" class="btn" data-act="clearall">${escapeHtml(MSG("clearAll"))}</button>
+                <button type="button" class="btn" data-act="clearhist">${escapeHtml(MSG("clearHistory"))}</button>
+              </div>
+              <div class="toolbar-right">
+                <div class="more-wrap">
+                  <button type="button" class="btn" data-act="more" id="pc-more-btn">${escapeHtml(MSG("more"))} ▾</button>
+                  <div class="more-menu" id="pc-more-menu">
+                    <button type="button" data-act="rename">${escapeHtml(MSG("renameTab"))}</button>
+                    <button type="button" data-act="site">${escapeHtml(isSiteDisabled() ? MSG("toggleOnPageOff") : MSG("toggleOnPage"))}</button>
+                    <button type="button" data-act="reply">${escapeHtml(MSG("reply"))}</button>
+                    <button type="button" data-act="exptxt">${escapeHtml(MSG("exportTxt"))}</button>
+                    <button type="button" data-act="expjson">${escapeHtml(MSG("exportJson"))}</button>
+                    <button type="button" data-act="expsess">${escapeHtml(MSG("exportSession"))}</button>
+                    <button type="button" data-act="imp">${escapeHtml(MSG("importSession"))}</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1787,6 +1808,14 @@
     if (mainInp && sess) {
       mainInp.value = getCalcDraft(sess);
       mainInp.addEventListener("input", () => {
+        const raw = mainInp.value;
+        const filtered = raw.replace(/[^\d+\-*/().,%×÷√^²kKmMbB\s]/g, "");
+        if (filtered !== raw) {
+          const pos = mainInp.selectionStart ?? filtered.length;
+          mainInp.value = filtered;
+          const removed = raw.length - filtered.length;
+          mainInp.setSelectionRange(Math.max(0, pos - removed), Math.max(0, pos - removed));
+        }
         sess.calcDraft = mainInp.value;
         debouncedSave();
         syncDisplaySubline();

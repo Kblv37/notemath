@@ -144,5 +144,8 @@
   "secDanger": { "message": "Danger zone" },
   "descTheme": { "message": "Choose a colour scheme for the extension UI." },
   "descDanger": { "message": "This will permanently delete all notes, history and settings." },
-  "optionsSubtitle": { "message": "Manage your NoteMath preferences" }
+  "optionsSubtitle": { "message": "Manage your NoteMath preferences" },
+  "secContact": { "message": "Contact" },
+  "lblContact": { "message": "Get in touch" },
+  "descContact": { "message": "Questions or suggestions? Write to us:" }
 }

@@ -29,10 +29,8 @@
   }
 }
 
-/* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; }
 
-/* ── Custom scrollbar ── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
@@ -42,7 +40,6 @@
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 * { scrollbar-width: thin; scrollbar-color: var(--bd-focus) transparent; }
 
-/* ── Body ── */
 body {
   margin: 0;
   font: 14px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -50,14 +47,12 @@ body {
   color: var(--fg);
 }
 
-/* ── Layout ── */
 .wrap {
   max-width: 660px;
   margin: 0 auto;
   padding: 32px 20px 56px;
 }
 
-/* ── Page title ── */
 .h1 {
   margin: 0 0 6px;
   font-size: 22px;
@@ -71,7 +66,6 @@ body {
   color: var(--muted);
 }
 
-/* ── Section group ── */
 .section-group {
   margin-bottom: 28px;
 }
@@ -85,7 +79,6 @@ body {
   margin: 0 0 10px 2px;
 }
 
-/* ── Card ── */
 .card {
   background: var(--card);
   border: 1px solid var(--bd);
@@ -100,7 +93,6 @@ body {
   border-color: color-mix(in srgb, var(--danger) 30%, var(--bd));
 }
 
-/* ── Card heading ── */
 .h2 {
   margin: 0 0 4px;
   font-size: 13px;
@@ -114,7 +106,6 @@ body {
   line-height: 1.45;
 }
 
-/* ── Row layouts ── */
 .row {
   display: flex;
   flex-wrap: wrap;
@@ -140,7 +131,6 @@ body {
   font-size: 13px;
 }
 
-/* ── Inputs ── */
 .inp {
   flex: 1;
   min-width: 0;
@@ -182,7 +172,6 @@ body {
 
 .file { display: none; }
 
-/* ── Checkbox / radio lines ── */
 .line {
   display: flex;
   align-items: flex-start;
@@ -201,7 +190,6 @@ body {
   line-height: 1.4;
 }
 
-/* ── Scale row ── */
 .scaleRow {
   margin-top: 12px;
   padding-top: 12px;
@@ -215,7 +203,6 @@ body {
   margin-bottom: 0;
 }
 
-/* ── Hint ── */
 .hint {
   margin: 6px 0 0;
   font-size: 12px;
@@ -223,7 +210,6 @@ body {
   line-height: 1.45;
 }
 
-/* ── Smart copy group ── */
 .smartCopyGroup {
   margin-top: 10px;
   padding-top: 10px;
@@ -243,21 +229,18 @@ body {
   gap: 4px 12px;
 }
 
-/* ── Session row ── */
 .sessRow {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
 }
 
-/* ── Button rows ── */
 .rowBtns {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-/* ── Buttons ── */
 .btn {
   border: 1px solid var(--bd);
   background: var(--surface2);
@@ -288,3 +271,16 @@ body {
 .btn.danger:hover {
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 6px 0;
+  transition: opacity 0.15s;
+}
+.link:hover { opacity: 0.75; text-decoration: underline; }

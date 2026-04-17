@@ -158,10 +158,8 @@
   function bind() {
     document.title = MSG("optionsTitle");
     $("pageTitle").textContent = MSG("optionsTitle");
-    // Page subtitle
     const sub = $("pageSubtitle");
     if (sub) sub.textContent = MSG("optionsSubtitle") || "NoteMath";
-    // Section group titles
     const setIfExists = (id, key) => { const el = $(id); if (el) el.textContent = MSG(key); };
     setIfExists("secInterface",  "secInterface");
     setIfExists("secClipboard",  "secClipboard");
@@ -172,6 +170,9 @@
     setIfExists("secDanger",     "secDanger");
     setIfExists("descTheme",     "descTheme");
     setIfExists("descDanger",    "descDanger");
+    setIfExists("secContact",    "secContact");
+    setIfExists("lblContact",    "lblContact");
+    setIfExists("descContact",   "descContact");
     $("lblTheme").textContent = MSG("theme");
     $("tLight").textContent = MSG("themeLight");
     $("tDark").textContent = MSG("themeDark");

@@ -144,5 +144,8 @@
   "secDanger": { "message": "Опасная зона" },
   "descTheme": { "message": "Выберите цветовую схему для интерфейса расширения." },
   "descDanger": { "message": "Это безвозвратно удалит все заметки, историю и настройки." },
-  "optionsSubtitle": { "message": "Управление настройками NoteMath" }
+  "optionsSubtitle": { "message": "Управление настройками NoteMath" },
+  "secContact": { "message": "Связаться" },
+  "lblContact": { "message": "Контакты" },
+  "descContact": { "message": "Если есть вопросы или предложения:" }
 }

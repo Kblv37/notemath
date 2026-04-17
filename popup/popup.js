@@ -238,7 +238,6 @@
           await chrome.tabs.sendMessage(tab.id, { type: "OPEN_PANEL" });
         }
       } catch {
-        /* content script may be unavailable on restricted pages */
       }
       window.close();
     });
